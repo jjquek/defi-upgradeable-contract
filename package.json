@@ -1,0 +1,22 @@
+{
+  "name": "jasper-sc-project",
+  "version": "1.0.0",
+  "description": "upgradeable proxy contract with users and manager",
+  "main": "truffle-config.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "ganache": "ganache --wallet.seed myCustomSeed"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@openzeppelin/contracts-upgradeable": "^4.8.3",
+    "ganache": "^7.8.0"
+  },
+  "devDependencies": {
+    "@openzeppelin/truffle-upgrades": "^1.18.0"
+  }
+}
