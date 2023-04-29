@@ -63,3 +63,31 @@ contract UpgradeableProxyContract is Initializable, ERC20Upgradeable, AccessCont
         emit TKNDeposited(msg.sender, amount);
     }
 
+
+    // * --------- withdraw -----------
+    function withdrawEther(uint256 amount) external onlyRole(USER) nonReentrant {
+        require(amount > 0, "withdrawEther: Withdrawal amount must be greater than 0");
+        require(_etherBalances[msg.sender] >= amount, "withdrawEther: Insufficient balance");
+
+        // Update balances
+        _etherBalances[msg.sender] -= amount;
+        // Transfer ETH to the user
+        (bool sent, ) = msg.sender.call{value: amount}(""); // this line makes the function susceptible to reentrancy attacks in the case an attacker becomes a USER. We use the nonReentrant modifier to prevent this. For why transfer() is not used and further reading, see links appended at the bottom of file. Note: need to consider gas costs that come as a trade-off with using nonReentrant.
+        require(sent, "withdrawEther: Failed to send ETH");
+        emit EtherWithdrawn(msg.sender, amount);
+    }
+
+    function withdrawTKN(address tokenContractAddress, uint256 amount) external onlyRole(USER) nonReentrant {
+        require(amount > 0, "withdrawTKN: Withdrawal amount must be greater than 0");
+        require(balanceOf(msg.sender) >= amount, "withdrawTKN: Insufficient balance");
+
+        // Update balances
+        _burn(msg.sender, amount);
+        // Transfer tokens to the user- Note: safeTransfer throws error if transfer doesn't succeed.
+        SafeERC20Upgradeable.safeTransfer(IERC20Upgradeable(tokenContractAddress), msg.sender, amount); // reentrancy vulnerablity is less here compared to in withdrawEther, because fallback functions of the attack contract are not triggered by the safeTransfer call. However, using a transfer function from an external contract we do not control means there is still the possibility of an attack. Note: need to weigh gas costs vs. vulnerability concerns.
+        emit TKNWithdrawn(msg.sender, amount);
+    }
+
+    // TODO : implement calculateDollarValue functions.
+    // * --------- MANAGER-ONLY FUNCTIONS -----------
+}
