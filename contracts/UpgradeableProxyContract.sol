@@ -42,3 +42,24 @@ contract UpgradeableProxyContract is Initializable, ERC20Upgradeable, AccessCont
         _setRoleAdmin(USER, MANAGER);
     }
 
+    // * --------- deposit -----------
+    function depositEther() external payable {
+        uint256 amount = msg.value;
+        require(amount > 0, "depositEther: Deposit amount must be greater than 0");
+        if (!hasRole(USER, msg.sender)) {
+            grantRole(USER, msg.sender);
+        }
+        _etherBalances[msg.sender] += amount;
+        emit EtherDeposited(msg.sender, amount);
+    }
+
+    function depositTKN(address tokenContractAddress, uint256 amount) external {
+        require(amount > 0, "depositTKN: Deposit amount must be greater than 0");
+        if (!hasRole(USER, msg.sender)) {
+            grantRole(USER, msg.sender);
+        }
+        SafeERC20Upgradeable.safeTransferFrom(IERC20Upgradeable(tokenContractAddress), msg.sender, address(this), amount);
+        _mint(msg.sender, amount);
+        emit TKNDeposited(msg.sender, amount);
+    }
+
