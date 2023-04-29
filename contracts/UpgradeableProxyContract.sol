@@ -26,4 +26,19 @@ contract UpgradeableProxyContract is Initializable, ERC20Upgradeable, AccessCont
     // ---- roles ---
     bytes32 public constant MANAGER = keccak256("MANAGER");
     bytes32 public constant USER = keccak256("USER");
-}
+    // ---- data structures ---
+    mapping(address => uint256) private _etherBalances; // _balances from ERC20Upgradeable stores the balance of ERC20 token deposits; this mapping stores the balance of ether deposits
+
+    uint256[50] private __gap; // extra storage space for future upgrade variables- 50 being roughly the space needed for another mapping like _etherBalances for 100 users.
+
+    // * --------- PUBLIC / EXTERNAL FUNCTIONS -----------
+    function initialize(address _manager) public initializer {
+        // we initialise the base contracts as per inheritance requirements, and modify this function with initializer to ensure it is called only once-- like a constructor
+        __ERC20_init("My Token", "TKN"); // name and symbol is up to us.
+        __AccessControl_init();
+        // set up various roles
+        _setupRole(DEFAULT_ADMIN_ROLE, _manager);
+        _setupRole(MANAGER, _manager);
+        _setRoleAdmin(USER, MANAGER);
+    }
+
