@@ -1,7 +1,10 @@
-let UpgradeableProxyContract = artifacts.require("UpgradeableProxyContract");
+const { deployProxy } = require("@openzeppelin/truffle-upgrades");
+const UpgradeableProxyContract = artifacts.require("UpgradeableProxyContract");
 
-module.exports = function (deployer) {
+module.exports = async function (deployer) {
   // deployment steps
-  deployer.deploy(UpgradeableProxyContract);
-  console.log("Great Success");
+  const instance = await deployProxy(UpgradeableProxyContract, [], {
+    deployer,
+  });
+  console.log("Deployed", instance.address);
 };
