@@ -22,7 +22,9 @@ contract UpgradeableProxyContract is
   using SafeERC20Upgradeable for IERC20Upgradeable;
 
   // * --------- CUSTOM EVENTS -----------
-  // for transprancy and consistency's sake, we'll emit events for any of the transactions that occur for Users. We make our own events wherever our Base Contracts do not already provide suitable events.
+  // for transprancy and consistency's sake, we'll emit events for any of the transactions that occur for Users. We make our own events wherever our Base Contracts do not already provide suitable events. Note: trade-off is that we spend more gas.
+  event ManagerCreated(address newManager);
+  event UserCreated(address newUser);
   event EtherDeposited(address depositor, uint256 amount);
   event TKNDeposited(address depositor, uint256 amount);
   event EtherWithdrawn(address withdrawer, uint256 amount);
@@ -45,6 +47,7 @@ contract UpgradeableProxyContract is
     _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
     _setupRole(MANAGER, msg.sender);
     _setRoleAdmin(USER, MANAGER);
+    emit ManagerCreated(msg.sender);
   }
 
   // * --------- deposit -----------
@@ -53,6 +56,7 @@ contract UpgradeableProxyContract is
     require(amount > 0, "depositEther: Deposit amount must be greater than 0");
     if (!hasRole(USER, msg.sender)) {
       grantRole(USER, msg.sender);
+      emit UserCreated(msg.sender);
     }
     _etherBalances[msg.sender] += amount;
     emit EtherDeposited(msg.sender, amount);
@@ -62,6 +66,7 @@ contract UpgradeableProxyContract is
     require(amount > 0, "depositTKN: Deposit amount must be greater than 0");
     if (!hasRole(USER, msg.sender)) {
       grantRole(USER, msg.sender);
+      emit UserCreated(msg.sender);
     }
     SafeERC20Upgradeable.safeTransferFrom(
       IERC20Upgradeable(tokenContractAddress),
