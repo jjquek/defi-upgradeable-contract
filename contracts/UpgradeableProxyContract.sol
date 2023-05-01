@@ -6,27 +6,30 @@ pragma solidity ^0.8.0;
 // A straightforward and robust way to implement upgradeable contracts is to extend contracts provided by OpenZepellin. Their contracts have been the subject of much effort and audit.
 // See inline comments where these imports are used for specific reasons.
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/structs/EnumerableMapUpgradeable.sol";
 
 contract UpgradeableProxyContract is
   Initializable,
-  ERC20Upgradeable,
   AccessControlUpgradeable,
   ReentrancyGuardUpgradeable
 {
+  // * --------- ATTACHING LIBRARY FUNCTIONS TO TYPES -----------
   // need the interface for ERC20Upgradeable to interact with API provided by the SafeERC20Upgradeable contract.
   using SafeERC20Upgradeable for IERC20Upgradeable;
+  // we use Open-Zeppellin's EnumerableMap to be able to iterate over the map-- useful for auditing and also checking balances.
+  using EnumerableMapUpgradeable for EnumerableMapUpgradeable.AddressToUintMap;
+  // SafeMath used for protecting against overflow.
 
   // * --------- CUSTOM EVENTS -----------
   // for transprancy and consistency's sake, we'll emit events for any of the transactions that occur for Users. We make our own events wherever our Base Contracts do not already provide suitable events. Note: trade-off is that we spend more gas.
   event EtherDeposited(address depositor, uint256 amount);
-  event TKNDeposited(address depositor, uint256 amount);
+  event ERC20Deposited(address depositor, uint256 amount);
   event EtherWithdrawn(address withdrawer, uint256 amount);
-  event TKNWithdrawn(address withdrawer, uint256 amount);
+  event ERC20Withdrawn(address withdrawer, uint256 amount);
   // * --------- CUSTOM ERROR INSTANCES -----------
   // these are cheaper to revert w as compared to strings.
   error Unauthorized();
@@ -36,13 +39,13 @@ contract UpgradeableProxyContract is
   bytes32 private constant USER = keccak256("USER");
   // ---- data structures ---
   mapping(address => uint256) private _etherBalances; // _balances from ERC20Upgradeable stores the balance of ERC20 token deposits; this mapping stores the balance of ether deposits; note: we could make use of EnumerableMapUpgradeable from Open-Zep if we wanted to be able to iterate over the mapping (e.g. for auditing)
+  EnumerableMapUpgradeable.AddressToUintMap private _erc20Balances;
 
   uint256[50] private __gap; // extra storage space for future upgrade variables- 50 being roughly the space needed for another mapping like _etherBalances for 100 users.
 
   // * --------- PUBLIC / EXTERNAL FUNCTIONS -----------
   function initialize() public initializer {
     // we initialise the base contracts as per inheritance requirements, and modify this function with initializer to ensure it is called only once-- like a constructor
-    __ERC20_init("My Token", "TKN"); // name and symbol is up to us.
     __AccessControl_init();
     // set up various roles
     _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
@@ -64,31 +67,48 @@ contract UpgradeableProxyContract is
     emit EtherDeposited(depositor, amount);
   }
 
-  function depositTKN(
-    address tokenContractAddress,
+  // * helper function to handle updating the EnumerableMap storing ERC20 balances nicely.
+  function updateBalanceWithERC20Deposit(
+    address depositor,
+    uint256 depositedAmount
+  ) internal {
+    uint256 newAmount = depositedAmount;
+    if (_erc20Balances.contains(depositor)) {
+      newAmount += _erc20Balances.get(depositor); // note: as of 0.8, the Solidity compiler has built-in overflow checking. https://hackernoon.com/hack-solidity-integer-overflow-and-underflow
+    }
+    _erc20Balances.set(depositor, newAmount);
+  }
+
+  function viewEthersBalance() external view returns (uint256) {
+    // * for users to view their ethers deposited.
+    return _etherBalances[msg.sender];
+  }
+
+  function depositERC20(
+    IERC20Upgradeable tokenContractAddress,
     address depositor,
     uint256 amount
   ) external {
     if (hasRole(MANAGER, depositor)) {
       revert Unauthorized();
     }
-    require(amount > 0, "depositTKN: Deposit amount must be greater than 0");
-    if (!hasRole(USER, depositor)) {
-      grantRole(USER, depositor);
-    }
+    require(amount > 0, "depositERC20: Deposit amount must be greater than 0");
     SafeERC20Upgradeable.safeTransferFrom(
       IERC20Upgradeable(tokenContractAddress),
       depositor,
       address(this),
       amount
-    );
-    _mint(depositor, amount);
-    emit TKNDeposited(depositor, amount);
+    ); // safeTransferFrom throws on failure.
+    emit ERC20Deposited(depositor, amount);
+    if (!hasRole(USER, depositor)) {
+      grantRole(USER, depositor);
+    }
+    updateBalanceWithERC20Deposit(depositor, amount);
   }
 
-  function viewEthersBalance() external view returns (uint256) {
+  function viewDepositedERC20Balance() external view returns (bool, uint256) {
     // * for users to view their ethers deposited.
-    return _etherBalances[msg.sender];
+    return _erc20Balances.tryGet(msg.sender);
   }
 
   // * --------- withdraw -----------
@@ -110,29 +130,29 @@ contract UpgradeableProxyContract is
     emit EtherWithdrawn(msg.sender, amount);
   }
 
-  function withdrawTKN(
-    address tokenContractAddress,
-    uint256 amount
-  ) external onlyRole(USER) nonReentrant {
-    require(
-      amount > 0,
-      "withdrawTKN: Withdrawal amount must be greater than 0"
-    );
-    require(
-      balanceOf(msg.sender) >= amount,
-      "withdrawTKN: Insufficient balance"
-    );
+  // function withdrawTKN(
+  //   address tokenContractAddress,
+  //   uint256 amount
+  // ) external onlyRole(USER) nonReentrant {
+  //   require(
+  //     amount > 0,
+  //     "withdrawTKN: Withdrawal amount must be greater than 0"
+  //   );
+  //   require(
+  //     balanceOf(msg.sender) >= amount,
+  //     "withdrawTKN: Insufficient balance"
+  //   );
 
-    // Update balances
-    _burn(msg.sender, amount);
-    // Transfer tokens to the user- Note: safeTransfer throws error if transfer doesn't succeed.
-    SafeERC20Upgradeable.safeTransfer(
-      IERC20Upgradeable(tokenContractAddress),
-      msg.sender,
-      amount
-    ); // reentrancy vulnerablity is less here compared to in withdrawEther, because fallback functions of an attack contract are not triggered by the safeTransfer call. However, using a transfer function from an external contract we do not control means there is still the possibility of an attack. Note: need to weigh gas costs vs. vulnerability concerns.
-    emit TKNWithdrawn(msg.sender, amount);
-  }
+  //   // Update balances
+  //   _burn(msg.sender, amount);
+  //   // Transfer tokens to the user- Note: safeTransfer throws error if transfer doesn't succeed.
+  //   SafeERC20Upgradeable.safeTransfer(
+  //     IERC20Upgradeable(tokenContractAddress),
+  //     msg.sender,
+  //     amount
+  //   ); // reentrancy vulnerablity is less here compared to in withdrawEther, because fallback functions of an attack contract are not triggered by the safeTransfer call. However, using a transfer function from an external contract we do not control means there is still the possibility of an attack. Note: need to weigh gas costs vs. vulnerability concerns.
+  //   emit ERC20Withdrawn(msg.sender, amount);
+  // }
 
   // TODO : implement calculateDollarValue functions.
   // * --------- MANAGER-ONLY FUNCTIONS -----------

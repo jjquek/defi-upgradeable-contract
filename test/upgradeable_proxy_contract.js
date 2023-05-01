@@ -8,6 +8,7 @@ const Web3 = require("web3");
 // makes it easier to check that functions revert; useful for testing w Open-Zepp contracts. see: https://ethereum.stackexchange.com/questions/48627/how-to-catch-revert-error-in-truffle-test-javascript
 const truffleAssert = require("truffle-assertions");
 // * --- Contract Abstractions ---
+const MockERC20Contract = artifacts.require("ERC20ReturnTrueMockUpgradeable");
 const UpgradeableProxyContract = artifacts.require("UpgradeableProxyContract");
 
 describe("UpgradeableProxyContract", () => {
@@ -28,16 +29,15 @@ describe("UpgradeableProxyContract", () => {
       );
     });
   });
-  contract("Deposit Functionality", (accounts) => {
+  contract("Deposit Ethers Functionality", (accounts) => {
     let managerAddress;
     const indexForEtherDepositorAddress = 1;
-    const indexForERC20DepositorAddress = 2;
     // any address except the first one (reserved for manager, is fine) for the above constants.
     beforeEach(async () => {
       this.proxyContract = await deployProxy(UpgradeableProxyContract);
       managerAddress = accounts[0];
     });
-    it("ETHER: should make anyone who deposits ether into a USER", async () => {
+    it("should make anyone who deposits ether into a USER", async () => {
       const depositor = accounts[indexForEtherDepositorAddress];
       const amount = 20;
       _ = await this.proxyContract.depositEther(depositor, amount, {
@@ -50,7 +50,7 @@ describe("UpgradeableProxyContract", () => {
         "address who deposits ether should be made a USER"
       );
     });
-    it("ETHER: should accumulate USER ether deposits correctly", async () => {
+    it("should accumulate USER ether deposits correctly", async () => {
       const depositor = accounts[indexForEtherDepositorAddress];
       const firstAmount = 10;
       const secondAmount = 10;
@@ -70,7 +70,7 @@ describe("UpgradeableProxyContract", () => {
         "deposits should accumulate correctly."
       );
     });
-    it("ETHER: should not allow the MANAGER to deposit ether", async () => {
+    it("should not allow the MANAGER to deposit ether", async () => {
       await truffleAssert.reverts(
         this.proxyContract.depositEther(managerAddress, 10, {
           from: managerAddress,
@@ -78,14 +78,32 @@ describe("UpgradeableProxyContract", () => {
       );
     });
   });
-  // should allow a User to deposit ether
-  // should allow a User to deposit ERC20 tokens
-  // should allow a user to withdraw ether they deposited
-  // should not allow a user to withdraw more than they deposited.
-  // should not allow the Manager to withdraw ether
-  // should not allow the Manager to withdraw ERC20 tokens
-  // should not allow the Manager to deposit ether
-  // should not allow the Manager to deposit ERC20 tokens
-  // only Users should be able to withdraw Ether
-  // only Users should be able to withdraw ERC20 tokens
+  contract("Deposit ERC20 Functionality", (accounts) => {
+    let managerAddress;
+    const indexForERC20DepositorAddress = 1;
+    // any address except the first one (reserved for manager, is fine) for the above constants.
+    beforeEach(async () => {
+      this.proxyContract = await deployProxy(UpgradeableProxyContract);
+      managerAddress = accounts[0];
+      this.mockERC20Contract = await MockERC20Contract.deployed();
+    });
+    it("should make anyone who deposits ERC20 into a USER", async () => {
+      const depositor = accounts[indexForERC20DepositorAddress];
+      const amount = 20;
+      _ = await this.proxyContract.depositERC20(
+        this.mockERC20Contract.address,
+        depositor,
+        amount,
+        {
+          from: managerAddress,
+        }
+      );
+      const userRoleHash = Web3.utils.soliditySha3("USER");
+      const isUser = await this.proxyContract.hasRole(userRoleHash, depositor);
+      expect(isUser).to.equal(
+        true,
+        "address who deposits ERC20 should be made a USER"
+      );
+    });
+  });
 });
