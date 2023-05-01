@@ -37,7 +37,7 @@ describe("UpgradeableProxyContract", () => {
       this.proxyContract = await deployProxy(UpgradeableProxyContract);
       managerAddress = accounts[0];
     });
-    it("should make anyone who deposits ether into a USER", async () => {
+    it("should make anyone who deposits ether into the contract a USER", async () => {
       const depositor = accounts[indexForEtherDepositorAddress];
       const amount = 20;
       _ = await this.proxyContract.depositEther(depositor, amount, {
@@ -88,7 +88,7 @@ describe("UpgradeableProxyContract", () => {
       managerAddress = accounts[0];
       this.mockERC20Contract = await MockERC20Contract.deployed();
     });
-    it("should make anyone who deposits ERC20 into a USER", async () => {
+    it("should make anyone who deposits ERC20 into the contract a USER", async () => {
       const depositor = accounts[indexForERC20DepositorAddress];
       const amount = 20;
       _ = await this.proxyContract.depositERC20(

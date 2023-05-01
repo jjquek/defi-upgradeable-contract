@@ -40,7 +40,8 @@ contract UpgradeableProxyContract is
   bytes32 private constant USER = keccak256("USER");
   // ---- data structures ---
   EnumerableMapUpgradeable.AddressToUintMap private _etherBalances;
-  EnumerableMapUpgradeable.AddressToUintMap private _erc20Balances;
+  mapping(address => EnumerableMapUpgradeable.AddressToUintMap)
+    private _erc20Balances;
 
   // * --------- PUBLIC / EXTERNAL FUNCTIONS -----------
   function initialize() public initializer {
@@ -91,17 +92,22 @@ contract UpgradeableProxyContract is
     }
   }
 
-  // TODO : NEED TO REFACTOR ERC20 BALANCE STATE VARIABLE TO BE NESTED MAPPING
   // * helper function to handle updating the EnumerableMap storing ERC20 balances nicely.
   function updateERC20BalanceWithDeposit(
+    address tokenContractAddress,
     address depositor,
     uint256 depositedAmount
   ) internal {
     uint256 newAmount = depositedAmount;
-    if (_erc20Balances.contains(depositor)) {
-      newAmount += _erc20Balances.get(depositor); // note: as of 0.8, the Solidity compiler has built-in overflow checking. https://hackernoon.com/hack-solidity-integer-overflow-and-underflow
+    // if a key doesn't exist in a solidity mapping, it maps to the default value for that type. The default value of the EnumerableMap.AddressToUintMap is an empty map, so we can check if it exists by checking whether it has items.
+    // check if depositor has made a deposit before
+    if (_erc20Balances[depositor].length() > 0) {
+      // check if depositor is adding to an an existing token balance
+      if (_erc20Balances[depositor].contains(tokenContractAddress)) {
+        newAmount += _erc20Balances[depositor].get(tokenContractAddress); // note: as of 0.8, the Solidity compiler has built-in overflow checking. https://hackernoon.com/hack-solidity-integer-overflow-and-underflow
+      }
     }
-    _erc20Balances.set(depositor, newAmount);
+    _erc20Balances[depositor].set(tokenContractAddress, newAmount);
   }
 
   function depositERC20(
@@ -123,12 +129,18 @@ contract UpgradeableProxyContract is
     if (!hasRole(USER, depositor)) {
       grantRole(USER, depositor);
     }
-    updateERC20BalanceWithDeposit(depositor, amount);
+    updateERC20BalanceWithDeposit(tokenContractAddress, depositor, amount);
   }
 
-  function viewDepositedERC20Balance() external view returns (bool, uint256) {
+  function viewDepositedERC20Balance(
+    address addressOfTokenToView
+  ) external view returns (uint256) {
     // * for users to view their ethers deposited.
-    return _erc20Balances.tryGet(msg.sender);
+    if (_erc20Balances[msg.sender].length() > 0) {
+      return _erc20Balances[msg.sender].get(addressOfTokenToView);
+    } else {
+      revert NothingDeposited();
+    }
   }
 
   // * --------- withdraw -----------
