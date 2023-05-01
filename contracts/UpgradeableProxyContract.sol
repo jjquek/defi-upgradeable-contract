@@ -29,8 +29,8 @@ contract UpgradeableProxyContract is
   event TKNWithdrawn(address withdrawer, uint256 amount);
   // * --------- STATE VARIABLES -----------
   // ---- roles ---
-  bytes32 public constant MANAGER = keccak256("MANAGER");
-  bytes32 public constant USER = keccak256("USER");
+  bytes32 private constant MANAGER = keccak256("MANAGER");
+  bytes32 private constant USER = keccak256("USER");
   // ---- data structures ---
   mapping(address => uint256) private _etherBalances; // _balances from ERC20Upgradeable stores the balance of ERC20 token deposits; this mapping stores the balance of ether deposits; note: we could make use of EnumerableMapUpgradeable from Open-Zep if we wanted to be able to iterate over the mapping (e.g. for auditing)
 
@@ -48,29 +48,33 @@ contract UpgradeableProxyContract is
   }
 
   // * --------- deposit -----------
-  function depositEther() external payable {
-    uint256 amount = msg.value;
+  function depositEther(address depositor, uint256 amount) external payable {
+    // note: we want the MANAGER address to be invoking this function as they are the role admin for USERs in the contract. Thus, we make the depositor and amount parameters so that 'msg.sender' is the MANAGER and thus can invoke the access control functions.
     require(amount > 0, "depositEther: Deposit amount must be greater than 0");
-    if (!hasRole(USER, msg.sender)) {
-      grantRole(USER, msg.sender);
+    if (!hasRole(USER, depositor)) {
+      grantRole(USER, depositor);
     }
-    _etherBalances[msg.sender] += amount;
-    emit EtherDeposited(msg.sender, amount);
+    _etherBalances[depositor] += amount;
+    emit EtherDeposited(depositor, amount);
   }
 
-  function depositTKN(address tokenContractAddress, uint256 amount) external {
+  function depositTKN(
+    address tokenContractAddress,
+    address depositor,
+    uint256 amount
+  ) external {
     require(amount > 0, "depositTKN: Deposit amount must be greater than 0");
-    if (!hasRole(USER, msg.sender)) {
-      grantRole(USER, msg.sender);
+    if (!hasRole(USER, depositor)) {
+      grantRole(USER, depositor);
     }
     SafeERC20Upgradeable.safeTransferFrom(
       IERC20Upgradeable(tokenContractAddress),
-      msg.sender,
+      depositor,
       address(this),
       amount
     );
-    _mint(msg.sender, amount);
-    emit TKNDeposited(msg.sender, amount);
+    _mint(depositor, amount);
+    emit TKNDeposited(depositor, amount);
   }
 
   // * --------- withdraw -----------
