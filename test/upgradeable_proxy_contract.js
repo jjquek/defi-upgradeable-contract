@@ -4,6 +4,9 @@ const { expect } = require("chai");
 const { deployProxy } = require("@openzeppelin/truffle-upgrades");
 // * --- Web3 API - for Role checking ---
 const Web3 = require("web3");
+// * --- Truffle Assertions Library ---
+// makes it easier to check that functions revert; useful for testing w Open-Zepp contracts. see: https://ethereum.stackexchange.com/questions/48627/how-to-catch-revert-error-in-truffle-test-javascript
+const truffleAssert = require("truffle-assertions");
 // * --- Contract Abstractions ---
 const UpgradeableProxyContract = artifacts.require("UpgradeableProxyContract");
 
@@ -34,7 +37,7 @@ describe("UpgradeableProxyContract", () => {
       this.proxyContract = await deployProxy(UpgradeableProxyContract);
       managerAddress = accounts[0];
     });
-    it("should make anyone who deposits ether into a USER", async () => {
+    it("ETHER: should make anyone who deposits ether into a USER", async () => {
       const depositor = accounts[indexForEtherDepositorAddress];
       const amount = 20;
       _ = await this.proxyContract.depositEther(depositor, amount, {
@@ -47,7 +50,7 @@ describe("UpgradeableProxyContract", () => {
         "address who deposits ether should be made a USER"
       );
     });
-    it("should accumulate USER ether deposits correctly", async () => {
+    it("ETHER: should accumulate USER ether deposits correctly", async () => {
       const depositor = accounts[indexForEtherDepositorAddress];
       const firstAmount = 10;
       const secondAmount = 10;
@@ -67,9 +70,13 @@ describe("UpgradeableProxyContract", () => {
         "deposits should accumulate correctly."
       );
     });
-    // it("should allow USERs to deposit more ether", async () => {});
-    // it("should not allow the MANAGER to deposit ether", async () => {});
-    // it("should not allow negative amounts to be deposited", async () => {});
+    it("ETHER: should not allow the MANAGER to deposit ether", async () => {
+      await truffleAssert.reverts(
+        this.proxyContract.depositEther(managerAddress, 10, {
+          from: managerAddress,
+        })
+      );
+    });
   });
   // should allow a User to deposit ether
   // should allow a User to deposit ERC20 tokens

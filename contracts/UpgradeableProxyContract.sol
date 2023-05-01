@@ -27,6 +27,9 @@ contract UpgradeableProxyContract is
   event TKNDeposited(address depositor, uint256 amount);
   event EtherWithdrawn(address withdrawer, uint256 amount);
   event TKNWithdrawn(address withdrawer, uint256 amount);
+  // * --------- CUSTOM ERROR INSTANCES -----------
+  // these are cheaper to revert w as compared to strings.
+  error Unauthorized();
   // * --------- STATE VARIABLES -----------
   // ---- roles ---
   bytes32 private constant MANAGER = keccak256("MANAGER");
@@ -50,6 +53,9 @@ contract UpgradeableProxyContract is
   // * --------- deposit -----------
   function depositEther(address depositor, uint256 amount) external payable {
     // note: we want the MANAGER address to be invoking this function as they are the role admin for USERs in the contract. Thus, we make the depositor and amount parameters so that 'msg.sender' is the MANAGER and thus can invoke the access control functions.
+    if (hasRole(MANAGER, depositor)) {
+      revert Unauthorized();
+    }
     require(amount > 0, "depositEther: Deposit amount must be greater than 0");
     if (!hasRole(USER, depositor)) {
       grantRole(USER, depositor);
@@ -63,6 +69,9 @@ contract UpgradeableProxyContract is
     address depositor,
     uint256 amount
   ) external {
+    if (hasRole(MANAGER, depositor)) {
+      revert Unauthorized();
+    }
     require(amount > 0, "depositTKN: Deposit amount must be greater than 0");
     if (!hasRole(USER, depositor)) {
       grantRole(USER, depositor);
