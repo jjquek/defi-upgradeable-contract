@@ -20,7 +20,7 @@ contract UpgradeableProxyContract is
   // * --------- ATTACHING LIBRARY FUNCTIONS TO TYPES -----------
   // need the interface for ERC20Upgradeable to interact with API provided by the SafeERC20Upgradeable contract.
   using SafeERC20Upgradeable for IERC20Upgradeable;
-  // we use Open-Zeppellin's EnumerableMap to be able to iterate over the map-- useful for auditing and also checking balances.
+  // we use Open-Zeppellin's EnumerableMap to be able to iterate (using 'length' and 'at') over the map-- useful for auditing and also checking balances.
   using EnumerableMapUpgradeable for EnumerableMapUpgradeable.AddressToUintMap;
   // SafeMath used for protecting against overflow.
 
@@ -33,12 +33,13 @@ contract UpgradeableProxyContract is
   // * --------- CUSTOM ERROR INSTANCES -----------
   // these are cheaper to revert w as compared to strings.
   error Unauthorized();
+  error NothingDeposited();
   // * --------- STATE VARIABLES -----------
   // ---- roles ---
   bytes32 private constant MANAGER = keccak256("MANAGER");
   bytes32 private constant USER = keccak256("USER");
   // ---- data structures ---
-  mapping(address => uint256) private _etherBalances; // _balances from ERC20Upgradeable stores the balance of ERC20 token deposits; this mapping stores the balance of ether deposits; note: we could make use of EnumerableMapUpgradeable from Open-Zep if we wanted to be able to iterate over the mapping (e.g. for auditing)
+  EnumerableMapUpgradeable.AddressToUintMap private _etherBalances;
   EnumerableMapUpgradeable.AddressToUintMap private _erc20Balances;
 
   uint256[50] private __gap; // extra storage space for future upgrade variables- 50 being roughly the space needed for another mapping like _etherBalances for 100 users.
@@ -54,6 +55,18 @@ contract UpgradeableProxyContract is
   }
 
   // * --------- deposit -----------
+  // * helper function to handle updating the EnumerableMap storing ether balances nicely.
+  function updateEthersBalanceWithDeposit(
+    address depositor,
+    uint256 depositedAmount
+  ) internal {
+    uint256 newAmount = depositedAmount;
+    if (_etherBalances.contains(depositor)) {
+      newAmount += _etherBalances.get(depositor); // note: as of 0.8, the Solidity compiler has built-in overflow checking. https://hackernoon.com/hack-solidity-integer-overflow-and-underflow
+    }
+    _etherBalances.set(depositor, newAmount);
+  }
+
   function depositEther(address depositor, uint256 amount) external payable {
     // note: we want the MANAGER address to be invoking this function as they are the role admin for USERs in the contract. Thus, we make the depositor and amount parameters so that 'msg.sender' is the MANAGER and thus can invoke the access control functions.
     if (hasRole(MANAGER, depositor)) {
@@ -63,12 +76,26 @@ contract UpgradeableProxyContract is
     if (!hasRole(USER, depositor)) {
       grantRole(USER, depositor);
     }
-    _etherBalances[depositor] += amount;
+    updateEthersBalanceWithDeposit(depositor, amount);
     emit EtherDeposited(depositor, amount);
   }
 
+  function viewDepositedEthersBalance()
+    external
+    view
+    returns (uint256 balance)
+  {
+    // * for users to view their ethers deposited.
+    if (_etherBalances.contains(msg.sender)) {
+      return _etherBalances.get(msg.sender);
+    } else {
+      revert NothingDeposited();
+    }
+  }
+
+  // TODO : NEED TO REFACTOR ERC20 BALANCE STATE VARIABLE TO BE NESTED MAPPING
   // * helper function to handle updating the EnumerableMap storing ERC20 balances nicely.
-  function updateBalanceWithERC20Deposit(
+  function updateERC20BalanceWithDeposit(
     address depositor,
     uint256 depositedAmount
   ) internal {
@@ -79,13 +106,8 @@ contract UpgradeableProxyContract is
     _erc20Balances.set(depositor, newAmount);
   }
 
-  function viewEthersBalance() external view returns (uint256) {
-    // * for users to view their ethers deposited.
-    return _etherBalances[msg.sender];
-  }
-
   function depositERC20(
-    IERC20Upgradeable tokenContractAddress,
+    address tokenContractAddress,
     address depositor,
     uint256 amount
   ) external {
@@ -103,7 +125,7 @@ contract UpgradeableProxyContract is
     if (!hasRole(USER, depositor)) {
       grantRole(USER, depositor);
     }
-    updateBalanceWithERC20Deposit(depositor, amount);
+    updateERC20BalanceWithDeposit(depositor, amount);
   }
 
   function viewDepositedERC20Balance() external view returns (bool, uint256) {
@@ -112,23 +134,23 @@ contract UpgradeableProxyContract is
   }
 
   // * --------- withdraw -----------
-  function withdrawEther(uint256 amount) external onlyRole(USER) nonReentrant {
-    require(
-      amount > 0,
-      "withdrawEther: Withdrawal amount must be greater than 0"
-    );
-    require(
-      _etherBalances[msg.sender] >= amount,
-      "withdrawEther: Insufficient balance"
-    );
+  // function withdrawEther(uint256 amount) external onlyRole(USER) nonReentrant {
+  //   require(
+  //     amount > 0,
+  //     "withdrawEther: Withdrawal amount must be greater than 0"
+  //   );
+  //   require(
+  //     _etherBalances[msg.sender] >= amount,
+  //     "withdrawEther: Insufficient balance"
+  //   );
 
-    // Update balances
-    _etherBalances[msg.sender] -= amount;
-    // Transfer ETH to the user
-    (bool sent, ) = msg.sender.call{ value: amount }(""); // this line makes the function susceptible to reentrancy attacks in the case an attacker becomes a USER. We use the nonReentrant modifier to prevent this. For why transfer() is not used and further reading, see links appended at the bottom of file. Note: need to consider gas costs that come as a trade-off with using nonReentrant.
-    require(sent, "withdrawEther: Failed to send ETH");
-    emit EtherWithdrawn(msg.sender, amount);
-  }
+  //   // Update balances
+  //   _etherBalances[msg.sender] -= amount;
+  //   // Transfer ETH to the user
+  //   (bool sent, ) = msg.sender.call{ value: amount }(""); // this line makes the function susceptible to reentrancy attacks in the case an attacker becomes a USER. We use the nonReentrant modifier to prevent this. For why transfer() is not used and further reading, see links appended at the bottom of file. Note: need to consider gas costs that come as a trade-off with using nonReentrant.
+  //   require(sent, "withdrawEther: Failed to send ETH");
+  //   emit EtherWithdrawn(msg.sender, amount);
+  // }
 
   // function withdrawTKN(
   //   address tokenContractAddress,

@@ -61,9 +61,10 @@ describe("UpgradeableProxyContract", () => {
       _ = await this.proxyContract.depositEther(depositor, secondAmount, {
         from: managerAddress,
       });
-      const depositedAmount = await this.proxyContract.viewEthersBalance({
-        from: depositor,
-      });
+      const depositedAmount =
+        await this.proxyContract.viewDepositedEthersBalance({
+          from: depositor,
+        });
       expect(depositedAmount.toNumber()).to.equal(
         // note: web3.js uses Big Number objects to represent large numbers outside the range of regular JS numbers. Without toNumber() this will fail.
         totalDepositExpected,
