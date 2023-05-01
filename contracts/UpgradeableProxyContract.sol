@@ -42,8 +42,6 @@ contract UpgradeableProxyContract is
   EnumerableMapUpgradeable.AddressToUintMap private _etherBalances;
   EnumerableMapUpgradeable.AddressToUintMap private _erc20Balances;
 
-  uint256[50] private __gap; // extra storage space for future upgrade variables- 50 being roughly the space needed for another mapping like _etherBalances for 100 users.
-
   // * --------- PUBLIC / EXTERNAL FUNCTIONS -----------
   function initialize() public initializer {
     // we initialise the base contracts as per inheritance requirements, and modify this function with initializer to ensure it is called only once-- like a constructor
@@ -178,4 +176,7 @@ contract UpgradeableProxyContract is
 
   // TODO : implement calculateDollarValue functions.
   // * --------- MANAGER-ONLY FUNCTIONS -----------
+
+  // * --------- EXTRA STORAGE SPACE -----------
+  uint256[50] private __gap; // extra storage space for future upgrade variables- 50 being roughly the space needed for another mapping like _etherBalances for 100 users.
 }
