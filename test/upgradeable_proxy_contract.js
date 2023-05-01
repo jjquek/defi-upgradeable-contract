@@ -8,7 +8,10 @@ const Web3 = require("web3");
 // makes it easier to check that functions revert; useful for testing w Open-Zepp contracts. see: https://ethereum.stackexchange.com/questions/48627/how-to-catch-revert-error-in-truffle-test-javascript
 const truffleAssert = require("truffle-assertions");
 // * --- Contract Abstractions ---
-const MockERC20Contract = artifacts.require("ERC20ReturnTrueMockUpgradeable");
+const MockAlwaysReturnTrueERC20 = artifacts.require(
+  "ERC20ReturnTrueMockUpgradeable"
+);
+// todo : require the ERC20MockUpgradeable artifact when testing involves two distinct mock ERC20 tokens.
 const UpgradeableProxyContract = artifacts.require("UpgradeableProxyContract");
 
 describe("UpgradeableProxyContract", () => {
@@ -86,7 +89,7 @@ describe("UpgradeableProxyContract", () => {
     beforeEach(async () => {
       this.proxyContract = await deployProxy(UpgradeableProxyContract);
       managerAddress = accounts[0];
-      this.mockERC20Contract = await MockERC20Contract.deployed();
+      this.mockERC20Contract = await MockAlwaysReturnTrueERC20.deployed();
     });
     it("should make anyone who deposits ERC20 into the contract a USER", async () => {
       const depositor = accounts[indexForERC20DepositorAddress];
@@ -106,5 +109,9 @@ describe("UpgradeableProxyContract", () => {
         "address who deposits ERC20 should be made a USER"
       );
     });
+    // TODO : add more tests for ERC20 deposit functionality--
+    // * additional_test: should be able to deposit two different ERC20 tokens
+    // * test: manager should not be allowed to deposit ERC20
+    // * test: depositing ERC20 should be reflected in the relevant data structures.
   });
 });

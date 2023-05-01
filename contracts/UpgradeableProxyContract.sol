@@ -11,6 +11,7 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeab
 import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/structs/EnumerableMapUpgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/structs/EnumerableSetUpgradeable.sol";
 
 contract UpgradeableProxyContract is
   Initializable,
@@ -22,7 +23,8 @@ contract UpgradeableProxyContract is
   using SafeERC20Upgradeable for IERC20Upgradeable;
   // we use Open-Zeppellin's EnumerableMap to be able to iterate (using 'length' and 'at') over the map-- useful for auditing and also checking balances.
   using EnumerableMapUpgradeable for EnumerableMapUpgradeable.AddressToUintMap;
-  // SafeMath used for protecting against overflow.
+  // we use Open-Zeppellin's EnumerableSet to iterate over our nested mapping. (See _usersWhoDepositedERC20)
+  using EnumerableSetUpgradeable for EnumerableSetUpgradeable.AddressSet;
 
   // * --------- CUSTOM EVENTS -----------
   // for transprancy and consistency's sake, we'll emit events for any of the transactions that occur for Users. We make our own events wherever our Base Contracts do not already provide suitable events. Note: trade-off is that we spend more gas.
@@ -42,6 +44,12 @@ contract UpgradeableProxyContract is
   EnumerableMapUpgradeable.AddressToUintMap private _etherBalances;
   mapping(address => EnumerableMapUpgradeable.AddressToUintMap)
     private _erc20Balances;
+  EnumerableSetUpgradeable.AddressSet private _usersWhoDepositedERC20;
+
+  // while having 2 separate structures makes state logic complicated, this is a workaround for not being able to nest EnumerableMaps.
+  // we want a mapping of User : (TokenDeposited : Amount) i.e., we're tracking the amount of tokens deposited for each user, allowing them to deposit different ERC20 tokens. For this, we need a nested mapping.
+  // the strategy is that when we need to iterate over the nested mappings, we get the addresses of users who deposited ERC20 from the EnumerableSet, and use this to index the outer mapping of _erc20Balances.
+  // the trade-off that comes with this functionality is the need to ensure that both _erc20Balances in _usersWhoDepositedERC20 gets properly updated in deposits and withdrawals.
 
   // * --------- PUBLIC / EXTERNAL FUNCTIONS -----------
   function initialize() public initializer {
@@ -92,6 +100,7 @@ contract UpgradeableProxyContract is
     }
   }
 
+  // TODO : test more for the depositing ERC20 logic.
   // * helper function to handle updating the EnumerableMap storing ERC20 balances nicely.
   function updateERC20BalanceWithDeposit(
     address tokenContractAddress,
@@ -106,6 +115,9 @@ contract UpgradeableProxyContract is
       if (_erc20Balances[depositor].contains(tokenContractAddress)) {
         newAmount += _erc20Balances[depositor].get(tokenContractAddress); // note: as of 0.8, the Solidity compiler has built-in overflow checking. https://hackernoon.com/hack-solidity-integer-overflow-and-underflow
       }
+    } else {
+      // new depositor
+      _usersWhoDepositedERC20.add(depositor);
     }
     _erc20Balances[depositor].set(tokenContractAddress, newAmount);
   }
