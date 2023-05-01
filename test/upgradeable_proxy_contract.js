@@ -111,7 +111,6 @@ describe("UpgradeableProxyContract", () => {
     });
     // TODO : add more tests for ERC20 deposit functionality--
     // * additional_test: should be able to deposit two different ERC20 tokens
-    // * test: manager should not be allowed to deposit ERC20
     // * test: depositing ERC20 should be reflected in the relevant data structures.
   });
 });

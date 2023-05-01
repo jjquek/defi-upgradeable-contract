@@ -127,9 +127,6 @@ contract UpgradeableProxyContract is
     address depositor,
     uint256 amount
   ) external {
-    if (hasRole(MANAGER, depositor)) {
-      revert Unauthorized();
-    }
     require(amount > 0, "depositERC20: Deposit amount must be greater than 0");
     SafeERC20Upgradeable.safeTransferFrom(
       IERC20Upgradeable(tokenContractAddress),
@@ -173,7 +170,7 @@ contract UpgradeableProxyContract is
   //   require(sent, "withdrawEther: Failed to send ETH");
   //   emit EtherWithdrawn(msg.sender, amount);
   // }
-
+  // Todo : Amend This To Reflect New State Logic for ERC20 deposits.
   // function withdrawTKN(
   //   address tokenContractAddress,
   //   uint256 amount
@@ -198,7 +195,6 @@ contract UpgradeableProxyContract is
   //   emit ERC20Withdrawn(msg.sender, amount);
   // }
 
-  // TODO : implement calculateDollarValue functions.
   // * --------- MANAGER-ONLY FUNCTIONS -----------
 
   // * --------- EXTRA STORAGE SPACE -----------
