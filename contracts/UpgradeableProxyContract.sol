@@ -4,7 +4,6 @@ pragma solidity ^0.8.0;
 
 // * --------- OPENZEPELLIN PACKAGES -----------
 // A straightforward and robust way to implement upgradeable contracts is to extend contracts provided by OpenZepellin. Their contracts have been the subject of much effort and audit.
-// See inline comments where these imports are used for specific reasons.
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
@@ -12,6 +11,13 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/structs/EnumerableMapUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/structs/EnumerableSetUpgradeable.sol";
+
+// * --------- UNISWAP -----------
+import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
+
+// * --------- LIDO -----------
+
+// * --------- CHAINLINK / PRICE FEEDS -----------
 
 contract UpgradeableProxyContract is
   Initializable,
@@ -37,6 +43,10 @@ contract UpgradeableProxyContract is
   error NothingDeposited();
 
   // * --------- STATE VARIABLES -----------
+  // ---- contract instances ---
+  address private constant ROUTER02_ADDRESS =
+    0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
+  IUniswapV2Router02 private router02;
   // ---- roles ---
   bytes32 private constant MANAGER = keccak256("MANAGER");
   bytes32 private constant USER = keccak256("USER");
@@ -54,6 +64,8 @@ contract UpgradeableProxyContract is
     _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
     _setupRole(MANAGER, msg.sender);
     _setRoleAdmin(USER, MANAGER);
+    // set up contract instances
+    router02 = IUniswapV2Router02(ROUTER02_ADDRESS);
   }
 
   // * --------- deposit -----------
@@ -151,6 +163,24 @@ contract UpgradeableProxyContract is
   // * --------- withdraw -----------
 
   // * --------- MANAGER-ONLY FUNCTIONS -----------
+  function tradeERC20TokensForUser(
+    address tokenIn,
+    address tokenOut,
+    address userTradingFor,
+    uint amountIn,
+    uint minAmountOut,
+    uint deadline
+  ) external onlyRole(MANAGER) {
+    // validate tokenIn and tokenOut
+    // validate amountIn
+    // todo : make deadline conditional
+    // approve Router to swap specified amountIn
+    // prepare trade path
+    // swapExactTokensForTokens
+    // update contract state accordingly-- the user's deposited ERC20 token balances should update.
+  }
+
+  function stakeEtherOnLidoForUser() external onlyRole(MANAGER) {}
 
   // * --------- EXTRA STORAGE SPACE -----------
   uint256[50] private __gap; // extra storage space for future upgrade variables- 50 being roughly the space needed for another mapping like _etherBalances for 100 users.
