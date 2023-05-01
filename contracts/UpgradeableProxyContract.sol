@@ -77,6 +77,11 @@ contract UpgradeableProxyContract is
     emit TKNDeposited(depositor, amount);
   }
 
+  function viewEthersBalance() external view returns (uint256) {
+    // * for users to view their ethers deposited.
+    return _etherBalances[msg.sender];
+  }
+
   // * --------- withdraw -----------
   function withdrawEther(uint256 amount) external onlyRole(USER) nonReentrant {
     require(

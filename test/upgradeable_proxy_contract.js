@@ -35,21 +35,36 @@ describe("UpgradeableProxyContract", () => {
       managerAddress = accounts[0];
     });
     it("should make anyone who deposits ether into a USER", async () => {
-      const addressWhoDepositsEther = accounts[indexForEtherDepositorAddress];
+      const depositor = accounts[indexForEtherDepositorAddress];
       const amount = 20;
-      const result = await this.proxyContract.depositEther(
-        addressWhoDepositsEther,
-        amount,
-        { from: managerAddress }
-      );
+      _ = await this.proxyContract.depositEther(depositor, amount, {
+        from: managerAddress,
+      });
       const userRoleHash = Web3.utils.soliditySha3("USER");
-      const isUser = await this.proxyContract.hasRole(
-        userRoleHash,
-        addressWhoDepositsEther
-      );
+      const isUser = await this.proxyContract.hasRole(userRoleHash, depositor);
       expect(isUser).to.equal(
         true,
         "address who deposits ether should be made a USER"
+      );
+    });
+    it("should accumulate USER ether deposits correctly", async () => {
+      const depositor = accounts[indexForEtherDepositorAddress];
+      const firstAmount = 10;
+      const secondAmount = 10;
+      const totalDepositExpected = firstAmount + secondAmount;
+      _ = await this.proxyContract.depositEther(depositor, firstAmount, {
+        from: managerAddress,
+      });
+      _ = await this.proxyContract.depositEther(depositor, secondAmount, {
+        from: managerAddress,
+      });
+      const depositedAmount = await this.proxyContract.viewEthersBalance({
+        from: depositor,
+      });
+      expect(depositedAmount.toNumber()).to.equal(
+        // note: web3.js uses Big Number objects to represent large numbers outside the range of regular JS numbers. Without toNumber() this will fail.
+        totalDepositExpected,
+        "deposits should accumulate correctly."
       );
     });
     // it("should allow USERs to deposit more ether", async () => {});
