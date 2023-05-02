@@ -111,6 +111,26 @@ contract UpgradeableProxyContract is
     }
   }
 
+  // * --------- withdraw Ethers functionality -----------
+  function withdrawEther(uint256 amount) external onlyRole(USER) nonReentrant {
+    require(
+      amount > 0,
+      "withdrawEther: Withdrawal amount must be greater than 0"
+    );
+    require(
+      _etherBalances.get(msg.sender) >= amount,
+      "withdrawEther: Insufficient balance"
+    );
+    // Transfer ETH to the user
+    (bool sent, ) = msg.sender.call{ value: amount }(""); // this line makes the function susceptible to reentrancy attacks in the case an attacker becomes a USER. We use the nonReentrant modifier to prevent this. For why transfer() is not used and further reading, see docs. Note: need to consider gas costs that come as a trade-off with using nonReentrant.
+    // todo : add to docs about this.
+    require(sent, "withdrawEther: Failed to send ETH");
+    emit EtherWithdrawn(msg.sender, amount);
+    // Update balances
+    uint256 newAmount = _etherBalances.get(msg.sender) - amount;
+    _etherBalances.set(msg.sender, newAmount);
+  }
+
   // * --------- deposit ERC20 functionality -----------
 
   // * helper function to handle updating the EnumerableMap storing ERC20 balances nicely.
@@ -179,9 +199,7 @@ contract UpgradeableProxyContract is
     }
   }
 
-  // TODO : implement withdraw functionality
-  // * --------- withdraw -----------
-
+  // TODO : implement withdrawERC20 functionality
   // * --------- MANAGER-ONLY FUNCTIONS -----------
   function tradeERC20TokensForUser(
     address tokenIn,

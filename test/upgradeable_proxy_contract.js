@@ -107,4 +107,15 @@ describe("UpgradeableProxyContract", () => {
     // * additional_test: should be able to deposit two different ERC20 tokens
     // * test: depositing ERC20 should be reflected in the relevant data structures.
   });
+  contract.only("Withdraw Ethers Functionality", (accounts) => {
+    it("should not allow non-USERs to withdraw ethers deposited.", async () => {
+      // todo
+    });
+    it("should allow USERs to withdraw ethers they deposited", async () => {
+      // todo
+    });
+    it("should emit an EtherWithdrawn event.", async () => {
+      // todo
+    });
+  });
 });
