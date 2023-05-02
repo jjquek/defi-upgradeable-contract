@@ -156,10 +156,16 @@ contract UpgradeableProxyContract is
     if (!implementsTotalSupplyMethod(tokenContractAddress)) {
       revert InvalidAssetDeposit();
     }
+    SafeERC20Upgradeable.safeTransferFrom(
+      IERC20Upgradeable(tokenContractAddress),
+      msg.sender,
+      address(this),
+      amount
+    ); // safeTransferFrom throws when token contract returns false.
+    emit ERC20Deposited(msg.sender, amount);
     updateERC20BalanceWithDeposit(tokenContractAddress, msg.sender, amount);
     // for why we choose to store the deposits in a private nested mapping variable, see docs.
     // todo : add this in.
-    emit ERC20Deposited(msg.sender, amount);
   }
 
   function viewDepositedERC20Balance(
