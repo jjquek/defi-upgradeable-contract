@@ -47,7 +47,8 @@ contract UpgradeableProxyContract is
   // ---- contract instances ---
   address private constant ROUTER02_ADDRESS =
     0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
-  IUniswapV2Router02 private router02;
+  IUniswapV2Router02 private _router02;
+  EnumerableMapUpgradeable.AddressToUintMap private _router02ERC20Allowances;
   // ---- roles ---
   bytes32 private constant MANAGER = keccak256("MANAGER");
   bytes32 private constant USER = keccak256("USER");
@@ -68,7 +69,7 @@ contract UpgradeableProxyContract is
     _setupRole(MANAGER, msg.sender);
     _setRoleAdmin(USER, MANAGER);
     // set up contract instances
-    router02 = IUniswapV2Router02(ROUTER02_ADDRESS);
+    _router02 = IUniswapV2Router02(ROUTER02_ADDRESS);
   }
 
   function assignUserRole(address client) external onlyRole(MANAGER) {
@@ -247,6 +248,36 @@ contract UpgradeableProxyContract is
   }
 
   // * --------- MANAGER-ONLY FUNCTIONS -----------
+
+  // * helper function to handle updating the EnumerableMap storing ERC20 balances nicely.
+  function updateERC20BalanceWithSwap(
+    address tokenTraded,
+    address tokenFromTrade,
+    address userTradedFor,
+    uint amountForTrade,
+    uint amountFromTrade
+  ) internal onlyRole(MANAGER) {
+    if (_erc20Balances[userTradedFor].length() > 0) {
+      // user who deposited tokens
+      if (_erc20Balances[userTradedFor].contains(tokenTraded)) {
+        // user had deposited token that was traded
+        uint newAmount = _erc20Balances[userTradedFor].get(tokenTraded) -
+          amountForTrade; // 0.8 solidity compiler reverts on underflow
+        // todo : remove record if newAmount is zero
+        _erc20Balances[userTradedFor].set(tokenTraded, newAmount);
+      } else {
+        revert("swapped token for user that wasn't deposited");
+      }
+    } else {
+      revert("swapped tokens for user that did not deposit");
+    }
+    updateERC20BalanceWithDeposit(
+      tokenFromTrade,
+      userTradedFor,
+      amountFromTrade
+    );
+  }
+
   function tradeERC20TokensForUser(
     address tokenIn,
     address tokenOut,
@@ -255,13 +286,60 @@ contract UpgradeableProxyContract is
     uint minAmountOut,
     uint deadline
   ) external onlyRole(MANAGER) {
-    // validate tokenIn and tokenOut
-    // validate amountIn
-    // todo : make deadline conditional
-    // approve Router to swap specified amountIn
-    // prepare trade path
-    // swapExactTokensForTokens
-    // update contract state accordingly-- the user's deposited ERC20 token balances should update.
+    // * validate inputs
+    require(tokenIn != tokenOut, "tokens to swap must be different");
+    require(amountIn > 0 && minAmountOut > 0, "invalid amounts for token swap");
+    require(
+      hasRole(USER, userTradingFor),
+      "token swapped must be done for a USER"
+    );
+    // setting default value for deadline if none is provided
+    if (deadline <= 0) {
+      deadline = block.timestamp + 60; // 60s/1min from current block.timestamp
+    }
+    // * approving router to swap amountIn of tokenIn
+    // note: vanilla ERC20 approve methods are known to have issues w race conditions and security. see https://github.com/ethereum/EIPs/issues/20#issuecomment-263524729 and https://docs.openzeppelin.com/contracts/2.x/api/token/erc20#IERC20-approve-address-uint256-. Open-Zepp's recommendation is that safeApprove is used only for setting an initial allowance, and the other helpers for adjusting it.
+    if (_router02ERC20Allowances.contains(tokenIn)) {
+      // there's an existing allowance for tokenIn
+      if (_router02ERC20Allowances.get(tokenIn) < amountIn) {
+        // but it needs to increased for amountIn
+        SafeERC20Upgradeable.safeIncreaseAllowance(
+          IERC20Upgradeable(tokenIn),
+          address(_router02),
+          amountIn
+        );
+        _router02ERC20Allowances.set(tokenIn, amountIn);
+      }
+    } else {
+      // there's no existing allowance for tokenIn
+      SafeERC20Upgradeable.safeApprove(
+        IERC20Upgradeable(tokenIn),
+        address(_router02),
+        amountIn
+      );
+      _router02ERC20Allowances.set(tokenIn, amountIn);
+    }
+    // * prepare trade path
+    address[] memory path = new address[](2);
+    path[0] = tokenIn;
+    path[1] = tokenOut;
+    // * execute trade
+    uint[] memory inputAndOutputTokenAmounts = _router02
+      .swapExactTokensForTokens(
+        amountIn,
+        minAmountOut,
+        path,
+        address(this),
+        deadline
+      ); // tokens out are deposited into contract if trade is successful
+    // * update user's token balances
+    updateERC20BalanceWithSwap(
+      tokenIn,
+      tokenOut,
+      userTradingFor,
+      inputAndOutputTokenAmounts[0], // input token amount
+      inputAndOutputTokenAmounts[1] // output token amount
+    );
   }
 
   function stakeEtherOnLidoForUser(
