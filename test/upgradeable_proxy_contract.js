@@ -17,12 +17,15 @@ const UpgradeableProxyContract = artifacts.require("UpgradeableProxyContract");
 describe("UpgradeableProxyContract", () => {
   // 'contract' works like 'describe' in Mocha, but provides truffle's "clean-room features", including the accounts made available by truffle develop. See https://trufflesuite.com/docs/truffle/how-to/debug-test/write-tests-in-javascript/#use-contract-instead-of-describe for more.
   contract("Contract Creation", (accounts) => {
+    let managerAddress;
+    beforeEach(async () => {
+      this.proxyContract = await deployProxy(UpgradeableProxyContract);
+      managerAddress = accounts[0];
+    });
     it("should grant the manager who deploys the proxyContract the MANAGER role", async () => {
-      const proxyContract = await deployProxy(UpgradeableProxyContract);
-      const managerAddress = accounts[0]; // 'deploy' or 'migrate' in truffle develop uses the first address as the account address that deploys the proxyContract.
       const managerRoleHash = Web3.utils.soliditySha3("MANAGER");
       // got above code to grab role hash representation from here: https://stackoverflow.com/questions/69647532/checking-and-granting-role-in-solidity
-      const isManager = await proxyContract.hasRole(
+      const isManager = await this.proxyContract.hasRole(
         managerRoleHash,
         managerAddress
       );
@@ -31,42 +34,50 @@ describe("UpgradeableProxyContract", () => {
         "deployer address should be given MANAGER role"
       );
     });
+    it("should allow for the manager to grant an address the USER role", async () => {
+      const addressToMakeUser = accounts[1];
+      const userRoleHash = Web3.utils.soliditySha3("USER");
+      await this.proxyContract.assignUserRole(addressToMakeUser, {
+        from: managerAddress,
+      });
+      const isUser = await this.proxyContract.hasRole(
+        userRoleHash,
+        addressToMakeUser
+      );
+      expect(isUser).to.equal(
+        true,
+        "deployer of contract should be able to make addresses USERs"
+      );
+    });
   });
   contract("Deposit Ethers Functionality", (accounts) => {
-    let managerAddress;
-    const indexForEtherDepositorAddress = 1;
+    let managerAddress, userAddress;
+    const indexForUserDepositorAddress = 1;
+    const indexForNonUserAddress = 2;
     // any address except the first one (reserved for manager, is fine) for the above constants.
     beforeEach(async () => {
       this.proxyContract = await deployProxy(UpgradeableProxyContract);
       managerAddress = accounts[0];
-    });
-    it("should make anyone who deposits ether into the contract a USER", async () => {
-      const depositor = accounts[indexForEtherDepositorAddress];
-      const amount = 20;
-      _ = await this.proxyContract.depositEther(depositor, amount, {
+      userAddress = accounts[indexForUserDepositorAddress];
+      await this.proxyContract.assignUserRole(userAddress, {
         from: managerAddress,
       });
-      const userRoleHash = Web3.utils.soliditySha3("USER");
-      const isUser = await this.proxyContract.hasRole(userRoleHash, depositor);
-      expect(isUser).to.equal(
-        true,
-        "address who deposits ether should be made a USER"
-      );
     });
+    it("should not allow non USERs to deposit ether", async () => {});
+    // todo : test that only users can call deposit.
     it("should accumulate USER ether deposits correctly", async () => {
-      const depositor = accounts[indexForEtherDepositorAddress];
       const firstAmount = 10;
       const secondAmount = 10;
       const totalDepositExpected = firstAmount + secondAmount;
-      _ = await this.proxyContract.depositEther(depositor, firstAmount, {
-        from: managerAddress,
+      _ = await this.proxyContract.depositEther(firstAmount, {
+        from: userAddress,
       });
-      _ = await this.proxyContract.depositEther(depositor, secondAmount, {
-        from: managerAddress,
+      _ = await this.proxyContract.depositEther(secondAmount, {
+        from: userAddress,
       });
       const depositedAmount =
         await this.proxyContract.viewDepositedEthersBalance({
-          from: depositor,
+          from: userAddress,
         });
       expect(depositedAmount.toNumber()).to.equal(
         // note: web3.js uses Big Number objects to represent large numbers outside the range of regular JS numbers. Without toNumber() this will fail.
@@ -76,7 +87,7 @@ describe("UpgradeableProxyContract", () => {
     });
     it("should not allow the MANAGER to deposit ether", async () => {
       await truffleAssert.reverts(
-        this.proxyContract.depositEther(managerAddress, 10, {
+        this.proxyContract.depositEther(10, {
           from: managerAddress,
         })
       );
@@ -90,24 +101,7 @@ describe("UpgradeableProxyContract", () => {
       this.proxyContract = await deployProxy(UpgradeableProxyContract);
       managerAddress = accounts[0];
       this.mockERC20Contract = await MockAlwaysReturnTrueERC20.deployed();
-    });
-    it("should make anyone who deposits ERC20 into the contract a USER", async () => {
-      const depositor = accounts[indexForERC20DepositorAddress];
-      const amount = 20;
-      _ = await this.proxyContract.depositERC20(
-        this.mockERC20Contract.address,
-        depositor,
-        amount,
-        {
-          from: managerAddress,
-        }
-      );
-      const userRoleHash = Web3.utils.soliditySha3("USER");
-      const isUser = await this.proxyContract.hasRole(userRoleHash, depositor);
-      expect(isUser).to.equal(
-        true,
-        "address who deposits ERC20 should be made a USER"
-      );
+      // todo : probably set up a user account here.
     });
     // TODO : add more tests for ERC20 deposit functionality--
     // * additional_test: should be able to deposit two different ERC20 tokens

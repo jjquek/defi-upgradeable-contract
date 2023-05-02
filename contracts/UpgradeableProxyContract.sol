@@ -41,6 +41,7 @@ contract UpgradeableProxyContract is
   // These are cheaper to revert w as compared to strings.
   error Unauthorized();
   error NothingDeposited();
+  error InvalidAssetDeposit();
 
   // * --------- STATE VARIABLES -----------
   // ---- contract instances ---
@@ -56,9 +57,9 @@ contract UpgradeableProxyContract is
     private _erc20Balances;
   EnumerableSetUpgradeable.AddressSet private _usersWhoDepositedERC20;
 
-  // * --------- PUBLIC / EXTERNAL FUNCTIONS -----------
+  // * --------- INITIALISE / ACCESS CONTROL -----------
   function initialize() public initializer {
-    // we initialise the base contracts as per inheritance requirements, and modify this function with initializer to ensure it is called only once-- like a constructor
+    // * we initialise the base contracts as per inheritance requirements, and modify this function with initializer to ensure it is called only once-- like a constructor
     __AccessControl_init();
     // set up various roles
     _setupRole(DEFAULT_ADMIN_ROLE, msg.sender);
@@ -68,7 +69,16 @@ contract UpgradeableProxyContract is
     router02 = IUniswapV2Router02(ROUTER02_ADDRESS);
   }
 
-  // * --------- deposit -----------
+  function assignUserRole(address client) external onlyRole(MANAGER) {
+    // * the manager has to make a given address a USER before they can deposit/withdraw.
+    if (!hasRole(USER, client)) {
+      grantRole(USER, client);
+    }
+  }
+
+  // * ========== USER FUNCTIONALITY ===========
+
+  // * --------- deposit Ethers functionality -----------
   // * helper function to handle updating the EnumerableMap storing ether balances nicely.
   function updateEthersBalanceWithDeposit(
     address depositor,
@@ -81,22 +91,16 @@ contract UpgradeableProxyContract is
     _etherBalances.set(depositor, newAmount);
   }
 
-  function depositEther(address depositor, uint256 amount) external payable {
-    // note: we want the MANAGER address to be invoking this function as they are the role admin for USERs in the contract. Thus, we make the depositor and amount parameters so that 'msg.sender' is the MANAGER and thus can invoke the access control functions.
-    if (hasRole(MANAGER, depositor)) {
-      revert Unauthorized();
-    }
+  function depositEther(uint256 amount) external payable onlyRole(USER) {
     require(amount > 0, "depositEther: Deposit amount must be greater than 0");
-    if (!hasRole(USER, depositor)) {
-      grantRole(USER, depositor);
-    }
-    updateEthersBalanceWithDeposit(depositor, amount);
-    emit EtherDeposited(depositor, amount);
+    updateEthersBalanceWithDeposit(msg.sender, amount);
+    emit EtherDeposited(msg.sender, amount);
   }
 
   function viewDepositedEthersBalance()
     external
     view
+    onlyRole(USER)
     returns (uint256 balance)
   {
     // * for users to view their ethers deposited.
@@ -107,7 +111,8 @@ contract UpgradeableProxyContract is
     }
   }
 
-  // TODO : test more for the depositing ERC20 logic.
+  // * --------- deposit ERC20 functionality -----------
+
   // * helper function to handle updating the EnumerableMap storing ERC20 balances nicely.
   function updateERC20BalanceWithDeposit(
     address tokenContractAddress,
@@ -129,28 +134,37 @@ contract UpgradeableProxyContract is
     _erc20Balances[depositor].set(tokenContractAddress, newAmount);
   }
 
+  // * helper function: checks whether a given contract address implements a totalSupply() method as a means of partially validating that a token contract address implements ERC20. Not fullproof as an adversarial contract could easily implement these methods, but we use this as a stopgap measure.
+  // * we can devote more time to adding more robusts checks when wanting to go onto mainnet. see docs for more.
+  // todo : add links to docs about concerns about ERC20 validation.
+  function implementsTotalSupplyMethod(
+    address purportedERC20Token
+  ) internal view returns (bool result) {
+    try IERC20Upgradeable(purportedERC20Token).totalSupply() returns (uint256) {
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   function depositERC20(
     address tokenContractAddress,
-    address depositor,
     uint256 amount
-  ) external {
+  ) external onlyRole(USER) {
     require(amount > 0, "depositERC20: Deposit amount must be greater than 0");
-    SafeERC20Upgradeable.safeTransferFrom(
-      IERC20Upgradeable(tokenContractAddress),
-      depositor,
-      address(this),
-      amount
-    ); // safeTransferFrom throws on failure.
-    emit ERC20Deposited(depositor, amount);
-    if (!hasRole(USER, depositor)) {
-      grantRole(USER, depositor);
+    // todo : need more robust check for ERC20 token address validity.
+    if (!implementsTotalSupplyMethod(tokenContractAddress)) {
+      revert InvalidAssetDeposit();
     }
-    updateERC20BalanceWithDeposit(tokenContractAddress, depositor, amount);
+    updateERC20BalanceWithDeposit(tokenContractAddress, msg.sender, amount);
+    // for why we choose to store the deposits in a private nested mapping variable, see docs.
+    // todo : add this in.
+    emit ERC20Deposited(msg.sender, amount);
   }
 
   function viewDepositedERC20Balance(
     address addressOfTokenToView
-  ) external view returns (uint256) {
+  ) external view onlyRole(USER) returns (uint256) {
     // * for users to view their ethers deposited.
     if (_erc20Balances[msg.sender].length() > 0) {
       return _erc20Balances[msg.sender].get(addressOfTokenToView);
