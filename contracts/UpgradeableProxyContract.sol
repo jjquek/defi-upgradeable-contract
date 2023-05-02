@@ -10,7 +10,6 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeab
 import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/structs/EnumerableMapUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/utils/structs/EnumerableSetUpgradeable.sol";
 
 // * --------- UNISWAP -----------
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
@@ -43,8 +42,8 @@ contract UpgradeableProxyContract is
   // * --------- ATTACHING LIBRARY FUNCTIONS TO TYPES -----------
   // Need the interface for ERC20Upgradeable to interact with API provided by the SafeERC20Upgradeable library.
   using SafeERC20Upgradeable for IERC20Upgradeable;
+  // Using EnumerableMapUpgradeable to be able to iterate over these mappings, which will very useful for calculating dollar value of deposits.
   using EnumerableMapUpgradeable for EnumerableMapUpgradeable.AddressToUintMap;
-  using EnumerableSetUpgradeable for EnumerableSetUpgradeable.AddressSet;
 
   // * --------- CUSTOM EVENTS -----------
   // For transprancy and consistency's sake, we'll emit events for any of the transactions that occur for Users. We make our own events wherever our Base Contracts do not already provide suitable events. Note: trade-off is that we spend more gas.
@@ -74,12 +73,21 @@ contract UpgradeableProxyContract is
   bytes32 private constant MANAGER = keccak256("MANAGER");
   bytes32 private constant USER = keccak256("USER");
   // ---- data structures ---
+  /*
+   * there are 3 mappings in the contract that manage:
+   * 1. How much ether (some) users have deposited -- _etherBalances
+   * 2. How much and which ERC20 (some) users have deposited -- _userVariousTokenBalances
+   * 3. How much and which ERC20 is deposited overall - _tokenBalances
+   * the first two are essential to keep track of how much user has deposited into the contract, which is necessary for withdrawals and other functionality.
+   * the third is not strictly essential and it brings the trade-off of complicating state management.
+   * however, without it, to calculate the overall dollar value of deposited ERC20s, we'd have to iterate through the second mapping-- which is a nested mapping.
+   * this is firstly, not possible without using some workaround (e.g. an enumerable set that keeps track of users who deposit ERC20). secondly, it is very costly gas-wise.
+   * in light of these considerations, it is deemed best to embrace the trade-off of greater complexity for the ability to get the overall dollar value of deposited ERC20.
+   */
   EnumerableMapUpgradeable.AddressToUintMap private _etherBalances;
   mapping(address => EnumerableMapUpgradeable.AddressToUintMap)
-    private _erc20Balances;
-  EnumerableSetUpgradeable.AddressSet private _usersWhoDepositedERC20;
-
-  // todo : explain why _usersWhoDepositedERC20 is here.
+    private _userVariousTokenBalances;
+  EnumerableMapUpgradeable.AddressToUintMap private _tokenBalances;
 
   // * --------- INITIALISE / ACCESS CONTROL -----------
   function initialize() public initializer {
@@ -161,8 +169,21 @@ contract UpgradeableProxyContract is
 
   // * --------- deposit ERC20 functionality -----------
 
-  // * helper function to handle updating the EnumerableMap storing ERC20 balances nicely.
-  function updateERC20BalanceWithDeposit(
+  // * helper function
+  function updateOverallERC20BalanceWithDeposit(
+    address tokenContractAddress,
+    uint256 depositedAmount
+  ) internal {
+    uint256 newAmount = depositedAmount;
+    // check if there's an existing amount
+    if (_tokenBalances.contains(tokenContractAddress)) {
+      newAmount += _tokenBalances.get(tokenContractAddress);
+    }
+    _tokenBalances.set(tokenContractAddress, newAmount);
+  }
+
+  // * helper function
+  function updateUserERC20BalanceWithDeposit(
     address tokenContractAddress,
     address depositor,
     uint256 depositedAmount
@@ -170,16 +191,15 @@ contract UpgradeableProxyContract is
     uint256 newAmount = depositedAmount;
     // if a key doesn't exist in a solidity mapping, it maps to the default value for that type. The default value of the EnumerableMap.AddressToUintMap is an empty map, so we can check if it exists by checking whether it has items.
     // check if depositor has made a deposit before
-    if (_erc20Balances[depositor].length() > 0) {
+    if (_userVariousTokenBalances[depositor].length() > 0) {
       // check if depositor is adding to an an existing token balance
-      if (_erc20Balances[depositor].contains(tokenContractAddress)) {
-        newAmount += _erc20Balances[depositor].get(tokenContractAddress); // note: as of 0.8, the Solidity compiler has built-in overflow checking. https://hackernoon.com/hack-solidity-integer-overflow-and-underflow
+      if (_userVariousTokenBalances[depositor].contains(tokenContractAddress)) {
+        newAmount += _userVariousTokenBalances[depositor].get(
+          tokenContractAddress
+        ); // note: as of 0.8, the Solidity compiler has built-in overflow checking. https://hackernoon.com/hack-solidity-integer-overflow-and-underflow
       }
-    } else {
-      // new depositor
-      _usersWhoDepositedERC20.add(depositor);
     }
-    _erc20Balances[depositor].set(tokenContractAddress, newAmount);
+    _userVariousTokenBalances[depositor].set(tokenContractAddress, newAmount);
   }
 
   function depositERC20(
@@ -199,33 +219,64 @@ contract UpgradeableProxyContract is
       amount
     ); // safeTransferFrom throws when token contract returns false.
     emit ERC20Deposited(userAddress, amount);
-    updateERC20BalanceWithDeposit(tokenContractAddress, userAddress, amount);
-    // for why we choose to store the deposits in a private nested mapping variable, see docs.
-    // todo : add this in.
+    updateOverallERC20BalanceWithDeposit(tokenContractAddress, amount);
+    updateUserERC20BalanceWithDeposit(
+      tokenContractAddress,
+      userAddress,
+      amount
+    );
   }
 
   function viewDepositedERC20Balance(
     address addressOfTokenToView
   ) public view onlyRole(USER) returns (uint256) {
     // * for users to view their ethers deposited.
-    if (_erc20Balances[msg.sender].length() > 0) {
-      return _erc20Balances[msg.sender].get(addressOfTokenToView);
+    if (_userVariousTokenBalances[msg.sender].length() > 0) {
+      return _userVariousTokenBalances[msg.sender].get(addressOfTokenToView);
     } else {
       revert NothingDeposited();
     }
   }
 
-  // * helper function to handle updating the EnumerableMap storing ERC20 balances nicely.
-  function updateERC20BalanceWithWithdrawal(
+  function viewTotalDepositedERC20Balance(
+    address tokenAddress
+  ) public view returns (uint256) {
+    if (_tokenBalances.contains(tokenAddress)) {
+      return _tokenBalances.get(tokenAddress);
+    } else {
+      revert NothingDeposited();
+    }
+  }
+
+  // * helper function
+  function updateOverallERC20BalanceWithWithdrawal(
+    address tokenContractAddress,
+    uint256 amountWithdrawn
+  ) internal {
+    require(
+      _tokenBalances.contains(tokenContractAddress),
+      "withdrawn token not in _tokenBalances"
+    );
+    uint256 newAmount = _tokenBalances.get(tokenContractAddress) -
+      amountWithdrawn;
+    _tokenBalances.set(tokenContractAddress, newAmount);
+  }
+
+  // * helper function
+  function updateUserERC20BalanceWithWithdrawal(
     address tokenContractAddress,
     address withdrawer,
-    uint256 amountToWithdraw
+    uint256 amountWithdrawn
   ) internal {
-    uint256 newAmount = amountToWithdraw;
-    // very similar logic to updateERC20BalanceWithDeposit
-    if (_erc20Balances[withdrawer].length() > 0) {
-      if (_erc20Balances[withdrawer].contains(tokenContractAddress)) {
-        newAmount -= _erc20Balances[withdrawer].get(tokenContractAddress); // note: as of 0.8, the Solidity compiler has built-in overflow checking. https://hackernoon.com/hack-solidity-integer-overflow-and-underflow
+    uint256 newAmount;
+    // very similar logic to updateUserERC20BalanceWithDeposit
+    if (_userVariousTokenBalances[withdrawer].length() > 0) {
+      if (
+        _userVariousTokenBalances[withdrawer].contains(tokenContractAddress)
+      ) {
+        newAmount =
+          _userVariousTokenBalances[withdrawer].get(tokenContractAddress) -
+          amountWithdrawn; // note: as of 0.8, the Solidity compiler has built-in overflow checking. https://hackernoon.com/hack-solidity-integer-overflow-and-underflow
       } else {
         revert("withdrawing token that hasn't been deposited");
       }
@@ -233,7 +284,7 @@ contract UpgradeableProxyContract is
       revert("withdrawing even though no tokens deposited");
     }
     // update the mapping with a new key:value pair
-    _erc20Balances[withdrawer].set(tokenContractAddress, newAmount);
+    _userVariousTokenBalances[withdrawer].set(tokenContractAddress, newAmount);
     // todo : remove record if withdrawal has zeroed user's deposits.
     // todo : remove User role
     // todo : probably emit Event that user has been removed.
@@ -262,38 +313,60 @@ contract UpgradeableProxyContract is
     // emit relevant event.
     emit ERC20Withdrawn(msg.sender, amountToWithdraw);
     // update the balances
-    updateERC20BalanceWithWithdrawal(
+    updateOverallERC20BalanceWithWithdrawal(
+      addressOfTokenToWithdraw,
+      amountToWithdraw
+    );
+    updateUserERC20BalanceWithWithdrawal(
       addressOfTokenToWithdraw,
       msg.sender,
       amountToWithdraw
     );
   }
 
-  // * --------- MANAGER-ONLY FUNCTIONS -----------
+  // * ======== MANAGER-ONLY FUNCTIONS =========
+  // * helper function
+  function updateOverallERC20BalanceWithSwap(
+    address tokenTraded,
+    address tokenFromTrade,
+    uint amountForTrade,
+    uint amountFromTrade
+  ) internal {
+    require(
+      _tokenBalances.contains(tokenTraded),
+      "_tokenBalances didn't have token that was traded"
+    );
+    // update balance for tokenTraded
+    uint newAmount = _tokenBalances.get(tokenTraded) - amountForTrade;
+    _tokenBalances.set(tokenTraded, newAmount);
+    // update balance for tokenFromTrade
+    updateOverallERC20BalanceWithDeposit(tokenFromTrade, amountFromTrade);
+  }
 
-  // * helper function to handle updating the EnumerableMap storing ERC20 balances nicely.
-  function updateERC20BalanceWithSwap(
+  // * helper function
+  function updateUserERC20BalanceWithSwap(
     address tokenTraded,
     address tokenFromTrade,
     address userTradedFor,
     uint amountForTrade,
     uint amountFromTrade
-  ) internal onlyRole(MANAGER) {
-    if (_erc20Balances[userTradedFor].length() > 0) {
+  ) internal {
+    if (_userVariousTokenBalances[userTradedFor].length() > 0) {
       // user who deposited tokens
-      if (_erc20Balances[userTradedFor].contains(tokenTraded)) {
+      if (_userVariousTokenBalances[userTradedFor].contains(tokenTraded)) {
         // user had deposited token that was traded
-        uint newAmount = _erc20Balances[userTradedFor].get(tokenTraded) -
-          amountForTrade; // 0.8 solidity compiler reverts on underflow
+        uint newAmount = _userVariousTokenBalances[userTradedFor].get(
+          tokenTraded
+        ) - amountForTrade; // 0.8 solidity compiler reverts on underflow
         // todo : remove record if newAmount is zero
-        _erc20Balances[userTradedFor].set(tokenTraded, newAmount);
+        _userVariousTokenBalances[userTradedFor].set(tokenTraded, newAmount);
       } else {
         revert("swapped token for user that wasn't deposited");
       }
     } else {
       revert("swapped tokens for user that did not deposit");
     }
-    updateERC20BalanceWithDeposit(
+    updateUserERC20BalanceWithDeposit(
       tokenFromTrade,
       userTradedFor,
       amountFromTrade
@@ -355,7 +428,7 @@ contract UpgradeableProxyContract is
         deadline
       ); // tokens out are deposited into contract if trade is successful
     // * update user's token balances
-    updateERC20BalanceWithSwap(
+    updateUserERC20BalanceWithSwap(
       tokenIn,
       tokenOut,
       userTradingFor,
@@ -384,9 +457,9 @@ contract UpgradeableProxyContract is
     uint256 amountOfstETHShares = ILido(LIDO_GOERLI_TESTNET_ADDRESS).submit{
       value: amount
     }();
-    uint256 newAmount = _etherBalances.get(userStakingFor) - amount;
+    uint256 newEthersBalance = _etherBalances.get(userStakingFor) - amount;
     // todo : handle zeroed case.
-    _etherBalances.set(userStakingFor, newAmount);
+    _etherBalances.set(userStakingFor, newEthersBalance);
     // formula: balanceOf(account) = shares[account] * totalPooledEther / totalShares
     // from and explained here: https://docs.lido.fi/contracts/lido#rebasing
     // we use ABKDMath.Quad to handle multiplication and division to avoid complications with division in Solidity (e.g. rounding to zero)
@@ -408,13 +481,26 @@ contract UpgradeableProxyContract is
       ILido(LIDO_GOERLI_TESTNET_ADDRESS).transfer(address(this), amountOfstEth),
       "failed to transfer stEth to contract"
     );
-    updateERC20BalanceWithDeposit(
+    updateUserERC20BalanceWithDeposit(
       LIDO_stETH_GOERLI_TESTNET_ADDRESS,
       userStakingFor,
       amountOfstEth
     );
+    updateOverallERC20BalanceWithDeposit(
+      LIDO_stETH_GOERLI_TESTNET_ADDRESS,
+      amountOfstEth
+    );
   }
 
+  // * ======== CALCULATE DOLLAR VALUE FUNCTIONS =========
+  // * ------- user-specific ------
+  // todo : of deposited ether
+  // todo : of deposited ERC20
+  // todo : of stEth
+  // * ------- groups of deposits ------
+  // todo : manager to see dollar value of all deposited ether
+  // todo : manager to see dollar value of all deposited ERC20
+  // todo : of stEth
   // * --------- EXTRA STORAGE SPACE -----------
   uint256[50] private __gap; // extra storage space for future upgrade variables- 50 being roughly the space needed for another mapping like _etherBalances for 100 users.
 }
