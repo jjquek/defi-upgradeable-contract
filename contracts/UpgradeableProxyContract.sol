@@ -55,6 +55,8 @@ contract UpgradeableProxyContract is
   event ERC20Deposited(address depositor, uint256 amount);
   event EtherWithdrawn(address withdrawer, uint256 amount);
   event ERC20Withdrawn(address withdrawer, uint256 amount);
+  event TokensSwapped(address tokenIn, address tokenOut);
+  event EtherStaked(address user, uint256 amount);
 
   // * --------- CUSTOM ERROR INSTANCES -----------
   // These are cheaper to revert w as compared to strings.
@@ -156,6 +158,7 @@ contract UpgradeableProxyContract is
   }
 
   // * --------- withdraw Ethers functionality -----------
+  // * called by user
   function withdrawEther(uint256 amount) external onlyRole(USER) nonReentrant {
     require(
       amount > 0,
@@ -166,8 +169,7 @@ contract UpgradeableProxyContract is
       "withdrawEther: Insufficient balance"
     );
     // Transfer ETH to the user
-    (bool sent, ) = msg.sender.call{ value: amount }(""); // this line makes the function susceptible to reentrancy attacks in the case an attacker becomes a USER. We use the nonReentrant modifier to prevent this. For why transfer() is not used and further reading, see docs. Note: need to consider gas costs that come as a trade-off with using nonReentrant.
-    // todo : add to docs about this.
+    (bool sent, ) = msg.sender.call{ value: amount }(""); // this line makes the function susceptible to reentrancy attacks in the case an attacker becomes a USER. We use the nonReentrant modifier to prevent this. see: https://consensys.net/diligence/blog/2019/09/stop-using-soliditys-transfer-now/
     require(sent, "withdrawEther: Failed to send ETH");
     emit EtherWithdrawn(msg.sender, amount);
     // Update balances
@@ -213,13 +215,14 @@ contract UpgradeableProxyContract is
     _userVariousTokenBalances[depositor].set(tokenContractAddress, newAmount);
   }
 
+  // * called by manager
   function depositERC20(
     address tokenContractAddress,
     address userAddress,
     uint256 amount
   ) external onlyRole(MANAGER) {
     require(amount > 0, "depositERC20: Deposit amount must be greater than 0");
-    // note: ERC20 deposits are handled differently from ether deposits-- ERC20 deposits are called by the MANAGER whereas USERs can deposit ethers into the contract directly. This is due to the difficulty of having a robust way of validating that a given address is really an ERC20 token. Despite this displacing control from the USER to the MANAGER, the security of the contract is worth this additional restriction. todo : see docs for more.
+    // note: ERC20 deposits are handled differently from ether deposits-- ERC20 deposits are called by the MANAGER whereas USERs can deposit ethers into the contract directly. This is due to the difficulty of having a robust way of validating that a given address is really an ERC20 token. Despite this displacing control from the USER to the MANAGER, the security of the contract is worth this additional restriction.
     if (!hasRole(USER, userAddress)) {
       revert Unauthorized();
     }
@@ -238,6 +241,7 @@ contract UpgradeableProxyContract is
     );
   }
 
+  // * called by user
   function viewDepositedERC20Balance(
     address addressOfTokenToView
   ) public view onlyRole(USER) returns (uint256) {
@@ -249,6 +253,7 @@ contract UpgradeableProxyContract is
     }
   }
 
+  // * called by anyone
   function viewTotalDepositedERC20Balance(
     address tokenAddress
   ) public view returns (uint256) {
@@ -259,6 +264,7 @@ contract UpgradeableProxyContract is
     }
   }
 
+  // * --------- withdraw ERC20 functionality -----------
   // * helper function
   function updateOverallERC20BalanceWithWithdrawal(
     address tokenContractAddress,
@@ -301,6 +307,7 @@ contract UpgradeableProxyContract is
     // todo : probably emit Event that user has been removed.
   }
 
+  // * called by user
   function withdrawDepositedERC20Token(
     address addressOfTokenToWithdraw,
     uint256 amountToWithdraw
@@ -384,6 +391,7 @@ contract UpgradeableProxyContract is
     );
   }
 
+  // * called by manager
   function tradeERC20TokensForUser(
     address tokenIn,
     address tokenOut,
@@ -438,6 +446,7 @@ contract UpgradeableProxyContract is
         address(this),
         deadline
       ); // tokens out are deposited into contract if trade is successful
+    emit TokensSwapped(tokenIn, tokenOut);
     // * update user's token balances
     updateUserERC20BalanceWithSwap(
       tokenIn,
@@ -448,6 +457,7 @@ contract UpgradeableProxyContract is
     );
   }
 
+  // * called by manager
   function stakeEtherOnLidoForUser(
     address userStakingFor,
     uint256 amount
@@ -468,6 +478,7 @@ contract UpgradeableProxyContract is
     uint256 amountOfstETHShares = ILido(LIDO_GOERLI_TESTNET_ADDRESS).submit{
       value: amount
     }();
+    emit EtherStaked(userStakingFor, amount);
     uint256 newEthersBalance = _etherBalances.get(userStakingFor) - amount;
     // todo : handle zeroed case.
     _etherBalances.set(userStakingFor, newEthersBalance);
