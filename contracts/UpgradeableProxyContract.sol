@@ -159,36 +159,24 @@ contract UpgradeableProxyContract is
     _erc20Balances[depositor].set(tokenContractAddress, newAmount);
   }
 
-  // * helper function: checks whether a given contract address implements a totalSupply() method as a means of partially validating that a token contract address implements ERC20. Not fullproof as an adversarial contract could easily implement these methods, but we use this as a stopgap measure.
-  // * we can devote more time to adding more robusts checks when wanting to go onto mainnet. see docs for more.
-  // todo : add links to docs about concerns about ERC20 validation.
-  function implementsTotalSupplyMethod(
-    address purportedERC20Token
-  ) internal view returns (bool result) {
-    try IERC20Upgradeable(purportedERC20Token).totalSupply() returns (uint256) {
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
   function depositERC20(
     address tokenContractAddress,
+    address userAddress,
     uint256 amount
-  ) external onlyRole(USER) {
+  ) external onlyRole(MANAGER) {
     require(amount > 0, "depositERC20: Deposit amount must be greater than 0");
-    // todo : need more robust check for ERC20 token address validity.
-    if (!implementsTotalSupplyMethod(tokenContractAddress)) {
-      revert InvalidAssetDeposit();
+    // note: ERC20 deposits are handled differently from ether deposits-- ERC20 deposits are called by the MANAGER whereas USERs can deposit ethers into the contract directly. This is due to the difficulty of having a robust way of validating that a given address is really an ERC20 token. Despite this displacing control from the USER to the MANAGER, the security of the contract is worth this additional restriction. todo : see docs for more.
+    if (!hasRole(USER, userAddress)) {
+      revert Unauthorized();
     }
     SafeERC20Upgradeable.safeTransferFrom(
       IERC20Upgradeable(tokenContractAddress),
-      msg.sender,
+      userAddress,
       address(this),
       amount
     ); // safeTransferFrom throws when token contract returns false.
-    emit ERC20Deposited(msg.sender, amount);
-    updateERC20BalanceWithDeposit(tokenContractAddress, msg.sender, amount);
+    emit ERC20Deposited(userAddress, amount);
+    updateERC20BalanceWithDeposit(tokenContractAddress, userAddress, amount);
     // for why we choose to store the deposits in a private nested mapping variable, see docs.
     // todo : add this in.
   }
