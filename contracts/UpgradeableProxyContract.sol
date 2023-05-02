@@ -33,7 +33,8 @@ interface ILido {
   ) external returns (bool);
 }
 // Contract w API for effective math calculations; relevant for staking.
-import "./ABKDMathQuad.sol";
+// import "./ABKDMathQuad.sol";
+// note : removed this import because otherwise contract was too large to deploy; ideally, would like to use this package
 
 // * --------- CHAINLINK / PRICE FEEDS -----------
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
@@ -485,19 +486,22 @@ contract UpgradeableProxyContract is
     // formula: balanceOf(account) = shares[account] * totalPooledEther / totalShares
     // from and explained here: https://docs.lido.fi/contracts/lido#rebasing
     // we use ABKDMath.Quad to handle multiplication and division to avoid complications with division in Solidity (e.g. rounding to zero)
-    uint256 amountOfstEth = ABDKMathQuad.toUInt(
-      ABDKMathQuad.div(
-        ABDKMathQuad.mul(
-          ABDKMathQuad.fromUInt(amountOfstETHShares),
-          ABDKMathQuad.fromUInt(
-            ILido(LIDO_GOERLI_TESTNET_ADDRESS).getTotalPooledEther()
-          )
-        ),
-        ABDKMathQuad.fromUInt(
-          ILido(LIDO_GOERLI_TESTNET_ADDRESS).getTotalShares()
-        )
-      )
-    );
+    uint256 amountOfstEth = (amountOfstETHShares *
+      ILido(LIDO_GOERLI_TESTNET_ADDRESS).getTotalPooledEther()) /
+      ILido(LIDO_GOERLI_TESTNET_ADDRESS).getTotalShares();
+    // uint256 amountOfstEth = ABDKMathQuad.toUInt(
+    //   ABDKMathQuad.div(
+    //     ABDKMathQuad.mul(
+    //       ABDKMathQuad.fromUInt(amountOfstETHShares),
+    //       ABDKMathQuad.fromUInt(
+    //         ILido(LIDO_GOERLI_TESTNET_ADDRESS).getTotalPooledEther()
+    //       )
+    //     ),
+    //     ABDKMathQuad.fromUInt(
+    //       ILido(LIDO_GOERLI_TESTNET_ADDRESS).getTotalShares()
+    //     )
+    //   )
+    // );
     // * transfer amount of stEth generated into contract as well as update mappings.
     require(
       ILido(LIDO_GOERLI_TESTNET_ADDRESS).transfer(address(this), amountOfstEth),
