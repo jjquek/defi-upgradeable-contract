@@ -3,7 +3,7 @@
 pragma solidity ^0.8.0;
 
 // * --------- OPENZEPELLIN PACKAGES -----------
-// A straightforward and robust way to implement upgradeable contracts is to extend contracts provided by OpenZepellin. Their contracts have been the subject of much effort and audit.
+// A straightforward and robust way to implement upgradeable contracts is to extend contracts provided by OpenZepellin. Using their upgrade plugins, we don't have to create separate Proxy and Implementation contracts ourselves. More generally, their contracts/utilities have been the subject of much effort and audit.
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
@@ -16,6 +16,22 @@ import "@openzeppelin/contracts-upgradeable/utils/structs/EnumerableSetUpgradeab
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
 
 // * --------- LIDO -----------
+interface ILido {
+  // we add the functions we need to call on Lido here
+  function getTotalShares() external returns (uint256);
+
+  function getTotalPooledEther() external returns (uint256);
+
+  function submit() external payable returns (uint256);
+
+  function transfer(
+    address _recipient,
+    uint256 _amount
+  ) external returns (bool);
+}
+
+// Contract w API for effective math calculations; relevant for staking.
+import "./ABKDMathQuad.sol";
 
 // * --------- CHAINLINK / PRICE FEEDS -----------
 
@@ -45,10 +61,15 @@ contract UpgradeableProxyContract is
 
   // * --------- STATE VARIABLES -----------
   // ---- contract instances ---
-  address private constant ROUTER02_ADDRESS =
+  address private constant ROUTER02_GOERLI_TESTNET_ADDRESS =
     0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D;
   IUniswapV2Router02 private _router02;
   EnumerableMapUpgradeable.AddressToUintMap private _router02ERC20Allowances;
+  address private constant LIDO_GOERLI_TESTNET_ADDRESS =
+    0xae7ab96520DE3A18E5e111B5EaAb095312D7fE84;
+  ILido private _lido;
+  address private constant LIDO_stETH_GOERLI_TESTNET_ADDRESS =
+    0x1643E812aE58766192Cf7D2Cf9567dF2C37e9B7F;
   // ---- roles ---
   bytes32 private constant MANAGER = keccak256("MANAGER");
   bytes32 private constant USER = keccak256("USER");
@@ -69,7 +90,8 @@ contract UpgradeableProxyContract is
     _setupRole(MANAGER, msg.sender);
     _setRoleAdmin(USER, MANAGER);
     // set up contract instances
-    _router02 = IUniswapV2Router02(ROUTER02_ADDRESS);
+    _router02 = IUniswapV2Router02(ROUTER02_GOERLI_TESTNET_ADDRESS);
+    _lido = ILido(LIDO_GOERLI_TESTNET_ADDRESS);
   }
 
   function assignUserRole(address client) external onlyRole(MANAGER) {
@@ -346,7 +368,51 @@ contract UpgradeableProxyContract is
     address userStakingFor,
     uint256 amount
   ) external onlyRole(MANAGER) {
-    // todo : implement.
+    // * validate inputs
+    require(amount > 0, "eth amount staked must be greater than 0");
+    require(hasRole(USER, userStakingFor), "address is not a user");
+    require(
+      _etherBalances.contains(userStakingFor),
+      "user hasn't deposited any ether"
+    );
+    require(
+      _etherBalances.get(userStakingFor) >= amount,
+      "user doesn't have enough ether for stake amount"
+    );
+    // * stake ether for stEth
+    // the amount of stEth one has from staking a certain amount of ether needs to be calculated from the amount stEth shares generated. 'stEth' and 'stEth shares' are not equivalent.
+    uint256 amountOfstETHShares = ILido(LIDO_GOERLI_TESTNET_ADDRESS).submit{
+      value: amount
+    }();
+    uint256 newAmount = _etherBalances.get(userStakingFor) - amount;
+    // todo : handle zeroed case.
+    _etherBalances.set(userStakingFor, newAmount);
+    // formula: balanceOf(account) = shares[account] * totalPooledEther / totalShares
+    // from and explained here: https://docs.lido.fi/contracts/lido#rebasing
+    // we use ABKDMath.Quad to handle multiplication and division to avoid complications with division in Solidity (e.g. rounding to zero)
+    uint256 amountOfstEth = ABDKMathQuad.toUInt(
+      ABDKMathQuad.div(
+        ABDKMathQuad.mul(
+          ABDKMathQuad.fromUInt(amountOfstETHShares),
+          ABDKMathQuad.fromUInt(
+            ILido(LIDO_GOERLI_TESTNET_ADDRESS).getTotalPooledEther()
+          )
+        ),
+        ABDKMathQuad.fromUInt(
+          ILido(LIDO_GOERLI_TESTNET_ADDRESS).getTotalShares()
+        )
+      )
+    );
+    // * transfer amount of stEth generated into contract as well as update mappings.
+    require(
+      ILido(LIDO_GOERLI_TESTNET_ADDRESS).transfer(address(this), amountOfstEth),
+      "failed to transfer stEth to contract"
+    );
+    updateERC20BalanceWithDeposit(
+      LIDO_stETH_GOERLI_TESTNET_ADDRESS,
+      userStakingFor,
+      amountOfstEth
+    );
   }
 
   // * --------- EXTRA STORAGE SPACE -----------
