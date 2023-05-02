@@ -7,24 +7,24 @@ import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 // code below is grabbed from: https://github.com/OpenZeppelin/openzeppelin-contracts-upgradeable/blob/master/contracts/mocks/ERC20MockUpgradeable.sol
 // just needed to set up another ERC20 mock instance for testing.
 contract ERC20MockUpgradeable is Initializable, ERC20Upgradeable {
-  function __ERC20Mock_init() internal onlyInitializing {
-    __ERC20_init_unchained("ERC20Mock", "E20M");
-  }
+    function __ERC20Mock_init() internal onlyInitializing {
+        __ERC20_init_unchained("ERC20Mock", "E20M");
+    }
 
-  function __ERC20Mock_init_unchained() internal onlyInitializing {}
+    function __ERC20Mock_init_unchained() internal onlyInitializing {}
 
-  function mint(address account, uint256 amount) external {
-    _mint(account, amount);
-  }
+    function mint(address account, uint256 amount) external {
+        _mint(account, amount);
+    }
 
-  function burn(address account, uint256 amount) external {
-    _burn(account, amount);
-  }
+    function burn(address account, uint256 amount) external {
+        _burn(account, amount);
+    }
 
-  /**
-   * @dev This empty reserved space is put in place to allow future versions to add new
-   * variables without shifting down storage in the inheritance chain.
-   * See https://docs.openzeppelin.com/contracts/4.x/upgradeable#storage_gaps
-   */
-  uint256[50] private __gap;
+    /**
+     * @dev This empty reserved space is put in place to allow future versions to add new
+     * variables without shifting down storage in the inheritance chain.
+     * See https://docs.openzeppelin.com/contracts/4.x/upgradeable#storage_gaps
+     */
+    uint256[50] private __gap;
 }

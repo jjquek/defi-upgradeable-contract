@@ -3,16 +3,20 @@
 pragma solidity ^0.8.0;
 
 // * --------- OPENZEPELLIN PACKAGES -----------
-// A straightforward and robust way to implement upgradeable contracts is to extend contracts provided by OpenZepellin. Using their upgrade plugins, we don't have to create separate Proxy and Implementation contracts ourselves. More generally, their contracts/utilities have been the subject of much effort and audit.
+// A straightforward and robust way to implement upgradeable contracts is to extend contracts provided by OpenZepellin. Using their upgrade plugins, we don't have to create separate Proxy and Implementation contracts ourselves. More generally, their open-source contracts provide much utility.:w
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/token/ERC20/IERC20Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/IERC20MetadataUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/security/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/structs/EnumerableMapUpgradeable.sol";
 
 // * --------- UNISWAP -----------
+// for trade function
 import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Router02.sol";
+// for getting token to Eth exchange rate
+import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Factory.sol";
+import "@uniswap/v2-core/contracts/interfaces/IUniswapV2Pair.sol";
 
 // * --------- LIDO -----------
 interface ILido {
@@ -28,11 +32,11 @@ interface ILido {
     uint256 _amount
   ) external returns (bool);
 }
-
 // Contract w API for effective math calculations; relevant for staking.
 import "./ABKDMathQuad.sol";
 
 // * --------- CHAINLINK / PRICE FEEDS -----------
+import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 
 contract UpgradeableProxyContract is
   Initializable,
@@ -41,7 +45,7 @@ contract UpgradeableProxyContract is
 {
   // * --------- ATTACHING LIBRARY FUNCTIONS TO TYPES -----------
   // Need the interface for ERC20Upgradeable to interact with API provided by the SafeERC20Upgradeable library.
-  using SafeERC20Upgradeable for IERC20Upgradeable;
+  using SafeERC20Upgradeable for IERC20MetadataUpgradeable;
   // Using EnumerableMapUpgradeable to be able to iterate over these mappings, which will very useful for calculating dollar value of deposits.
   using EnumerableMapUpgradeable for EnumerableMapUpgradeable.AddressToUintMap;
 
@@ -69,6 +73,11 @@ contract UpgradeableProxyContract is
   ILido private _lido;
   address private constant LIDO_stETH_GOERLI_TESTNET_ADDRESS =
     0x1643E812aE58766192Cf7D2Cf9567dF2C37e9B7F;
+  address private constant ETH_USD_GOERLI_TESTNET_PRICEFEED =
+    0xD4a33860578De61DBAbDc8BFdb98FD742fA7028e;
+  AggregatorV3Interface private _priceFeed; // for eth-usd
+  address private constant UNISWAP_V2_FACTORY_ADDRESS =
+    0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f;
   // ---- roles ---
   bytes32 private constant MANAGER = keccak256("MANAGER");
   bytes32 private constant USER = keccak256("USER");
@@ -81,7 +90,7 @@ contract UpgradeableProxyContract is
    * the first two are essential to keep track of how much user has deposited into the contract, which is necessary for withdrawals and other functionality.
    * the third is not strictly essential and it brings the trade-off of complicating state management.
    * however, without it, to calculate the overall dollar value of deposited ERC20s, we'd have to iterate through the second mapping-- which is a nested mapping.
-   * this is firstly, not possible without using some workaround (e.g. an enumerable set that keeps track of users who deposit ERC20). secondly, it is very costly gas-wise.
+   * this is very costly gas wise, and we cannot iterate over the outer mapping (which is a raw Solidity mapping) without some workaround.
    * in light of these considerations, it is deemed best to embrace the trade-off of greater complexity for the ability to get the overall dollar value of deposited ERC20.
    */
   EnumerableMapUpgradeable.AddressToUintMap private _etherBalances;
@@ -100,6 +109,7 @@ contract UpgradeableProxyContract is
     // set up contract instances
     _router02 = IUniswapV2Router02(ROUTER02_GOERLI_TESTNET_ADDRESS);
     _lido = ILido(LIDO_GOERLI_TESTNET_ADDRESS);
+    _priceFeed = AggregatorV3Interface(ETH_USD_GOERLI_TESTNET_PRICEFEED);
   }
 
   function assignUserRole(address client) external onlyRole(MANAGER) {
@@ -112,7 +122,7 @@ contract UpgradeableProxyContract is
   // * ========== USER FUNCTIONALITY ===========
 
   // * --------- deposit Ethers functionality -----------
-  // * helper function to handle updating the EnumerableMap storing ether balances nicely.
+  // * helper function
   function updateEthersBalanceWithDeposit(
     address depositor,
     uint256 depositedAmount
@@ -124,19 +134,20 @@ contract UpgradeableProxyContract is
     _etherBalances.set(depositor, newAmount);
   }
 
+  // * called by user
   function depositEther(uint256 amount) external payable onlyRole(USER) {
     require(amount > 0, "depositEther: Deposit amount must be greater than 0");
     updateEthersBalanceWithDeposit(msg.sender, amount);
     emit EtherDeposited(msg.sender, amount);
   }
 
+  // * called by user
   function viewDepositedEthersBalance()
     external
     view
     onlyRole(USER)
     returns (uint256 balance)
   {
-    // * for users to view their ethers deposited.
     if (_etherBalances.contains(msg.sender)) {
       return _etherBalances.get(msg.sender);
     } else {
@@ -213,7 +224,7 @@ contract UpgradeableProxyContract is
       revert Unauthorized();
     }
     SafeERC20Upgradeable.safeTransferFrom(
-      IERC20Upgradeable(tokenContractAddress),
+      IERC20MetadataUpgradeable(tokenContractAddress),
       userAddress,
       address(this),
       amount
@@ -305,7 +316,7 @@ contract UpgradeableProxyContract is
     );
     // transfer the Token to the User
     SafeERC20Upgradeable.safeTransferFrom(
-      IERC20Upgradeable(addressOfTokenToWithdraw),
+      IERC20MetadataUpgradeable(addressOfTokenToWithdraw),
       address(this),
       msg.sender,
       amountToWithdraw
@@ -399,7 +410,7 @@ contract UpgradeableProxyContract is
       if (_router02ERC20Allowances.get(tokenIn) < amountIn) {
         // but it needs to increased for amountIn
         SafeERC20Upgradeable.safeIncreaseAllowance(
-          IERC20Upgradeable(tokenIn),
+          IERC20MetadataUpgradeable(tokenIn),
           address(_router02),
           amountIn
         );
@@ -408,7 +419,7 @@ contract UpgradeableProxyContract is
     } else {
       // there's no existing allowance for tokenIn
       SafeERC20Upgradeable.safeApprove(
-        IERC20Upgradeable(tokenIn),
+        IERC20MetadataUpgradeable(tokenIn),
         address(_router02),
         amountIn
       );
@@ -493,14 +504,139 @@ contract UpgradeableProxyContract is
   }
 
   // * ======== CALCULATE DOLLAR VALUE FUNCTIONS =========
-  // * ------- user-specific ------
-  // todo : of deposited ether
-  // todo : of deposited ERC20
-  // todo : of stEth
-  // * ------- groups of deposits ------
-  // todo : manager to see dollar value of all deposited ether
-  // todo : manager to see dollar value of all deposited ERC20
-  // todo : of stEth
+
+  // * helper function
+  function getLatestDollarValueOfEther() internal view returns (int) {
+    (, int price, , , ) = _priceFeed.latestRoundData();
+    return price;
+  }
+
+  // * helper function
+  function dollarValueOfEthersAmount(
+    uint256 ethersAmount
+  ) internal view returns (uint256) {
+    int256 ethPrice = getLatestDollarValueOfEther(); // get the latest price of ETH in USD
+    uint256 dollarValue = (uint256(ethPrice) * ethersAmount) / 1e18; // calculate the dollar value of ethers
+    return dollarValue;
+  }
+
+  // * helper function
+  function checkERC20TokenPairedWithEtherOnUniswap(
+    address erc20Address
+  ) internal view returns (bool, uint256) {
+    // this is the canonical way to look up the pair addresses 'on chain' for two given tokens.
+    // see : https://docs.uniswap.org/contracts/v2/guides/smart-contract-integration/getting-pair-addresses
+    IUniswapV2Factory factory = IUniswapV2Factory(UNISWAP_V2_FACTORY_ADDRESS);
+    address pairAddress = factory.getPair(erc20Address, _router02.WETH());
+
+    IUniswapV2Pair pair = IUniswapV2Pair(pairAddress);
+
+    (uint256 reserve0, uint256 reserve1, ) = pair.getReserves();
+
+    // If token0 is WETH, reserve0 is the Ether reserve
+    // If token1 is WETH, reserve1 is the Ether reserve
+    address token0 = pair.token0();
+    address token1 = pair.token1();
+    uint256 etherReserve;
+    uint256 tokenReserve;
+    if (token0 == _router02.WETH()) {
+      etherReserve = reserve0;
+      tokenReserve = reserve1;
+    } else if (token1 == _router02.WETH()) {
+      etherReserve = reserve1;
+      tokenReserve = reserve0;
+    } else {
+      // Token is not paired with Ether on Uniswap
+      return (false, 0);
+    }
+
+    // Calculate the token-to-Ether exchange rate
+    return (true, (etherReserve * 10 ** 18) / tokenReserve);
+    // todo : to figure out whether ABKDMathQuad can be used w this.
+  }
+
+  // * helper function-- calculating token dollar value via checking its value against Eth (if possible)
+  function getTokenDollarValue(
+    int256 etherDollarValue,
+    uint256 tokenToEthExchangeRate,
+    address erc20Token
+  ) public view returns (uint256) {
+    // casting etherDollarValue to unit256 is safe because Chainlink price feed returns positive integer value.
+    uint256 tokenDollarValue = (((uint256(etherDollarValue) *
+      tokenToEthExchangeRate) /
+      (10 ** uint256(IERC20MetadataUpgradeable(erc20Token).decimals()))) *
+      uint256(etherDollarValue)) / (10 ** 8);
+    // * breaking down the calculation:
+    // todo
+    // note : not all ERC20 Tokens deposited will implement decimals(), although it is part of the official implementation.
+    return tokenDollarValue;
+  }
+
+  // * ------- called by users ------
+  function viewDepositedEthersDollarValue()
+    external
+    view
+    onlyRole(USER)
+    returns (uint256)
+  {
+    require(_etherBalances.contains(msg.sender), "no ethers deposited");
+    return dollarValueOfEthersAmount(_etherBalances.get(msg.sender));
+  }
+
+  function viewDepositedERC20sDollarValue()
+    external
+    view
+    onlyRole(USER)
+    returns (uint256)
+  {
+    require(
+      _userVariousTokenBalances[msg.sender].length() > 0,
+      "no ERC20s deposited"
+    );
+    // * get amount of erc20 deposited.
+    uint256 total = 0;
+    for (uint i = 0; i < _userVariousTokenBalances[msg.sender].length(); i++) {
+      (address token, uint256 amount) = _userVariousTokenBalances[msg.sender]
+        .at(i);
+      (
+        bool paired,
+        uint256 exchangeRate
+      ) = checkERC20TokenPairedWithEtherOnUniswap(token);
+      if (!paired) {
+        continue;
+      }
+      uint256 totalTokensDollarValue = getTokenDollarValue(
+        getLatestDollarValueOfEther(),
+        exchangeRate,
+        token
+      ) * amount;
+      total += totalTokensDollarValue;
+    }
+    return total;
+  }
+
+  // * ------- called by anyone ------
+  function viewAllDepositedERC20sDollarValue() external view returns (uint256) {
+    uint256 total = 0;
+    for (uint i = 0; i < _tokenBalances.length(); i++) {
+      (address token, uint256 amount) = _tokenBalances.at(i);
+      (
+        bool paired,
+        uint256 exchangeRate
+      ) = checkERC20TokenPairedWithEtherOnUniswap(token);
+      if (!paired) {
+        continue;
+      }
+      uint256 totalTokensDollarValue = getTokenDollarValue(
+        getLatestDollarValueOfEther(),
+        exchangeRate,
+        token
+      ) * amount;
+      total += totalTokensDollarValue;
+    }
+    return total;
+  }
+
   // * --------- EXTRA STORAGE SPACE -----------
   uint256[50] private __gap; // extra storage space for future upgrade variables- 50 being roughly the space needed for another mapping like _etherBalances for 100 users.
 }
