@@ -57,6 +57,8 @@ contract UpgradeableProxyContract is
     private _erc20Balances;
   EnumerableSetUpgradeable.AddressSet private _usersWhoDepositedERC20;
 
+  // todo : explain why _usersWhoDepositedERC20 is here.
+
   // * --------- INITIALISE / ACCESS CONTROL -----------
   function initialize() public initializer {
     // * we initialise the base contracts as per inheritance requirements, and modify this function with initializer to ensure it is called only once-- like a constructor
@@ -129,6 +131,9 @@ contract UpgradeableProxyContract is
     // Update balances
     uint256 newAmount = _etherBalances.get(msg.sender) - amount;
     _etherBalances.set(msg.sender, newAmount);
+    // todo : remove user's record from balances if withdrawal has zeroed deposits.
+    // todo : and remove User privileges if so.
+    // todo : probably emit Event that user has been removed.
   }
 
   // * --------- deposit ERC20 functionality -----------
@@ -218,6 +223,9 @@ contract UpgradeableProxyContract is
     }
     // update the mapping with a new key:value pair
     _erc20Balances[withdrawer].set(tokenContractAddress, newAmount);
+    // todo : remove record if withdrawal has zeroed user's deposits.
+    // todo : remove User role
+    // todo : probably emit Event that user has been removed.
   }
 
   function withdrawDepositedERC20Token(
@@ -229,7 +237,6 @@ contract UpgradeableProxyContract is
       amountToWithdraw > 0,
       "withdrawERC20: Withdrawal amount must be greater than 0"
     );
-    // todo : validate that addressOfTokenToWithdraw is genuine ERC20 Token address.
     require(
       viewDepositedERC20Balance(addressOfTokenToWithdraw) >= amountToWithdraw,
       "withdrawERC20: Withdrawal amount must be less than or equal to deposited amount."
