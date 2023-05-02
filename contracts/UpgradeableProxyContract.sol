@@ -199,7 +199,58 @@ contract UpgradeableProxyContract is
     }
   }
 
-  // TODO : implement withdrawERC20 functionality
+  // * helper function to handle updating the EnumerableMap storing ERC20 balances nicely.
+  function updateERC20BalanceWithWithdrawal(
+    address tokenContractAddress,
+    address withdrawer,
+    uint256 amountToWithdraw
+  ) internal {
+    uint256 newAmount = amountToWithdraw;
+    // very similar logic to updateERC20BalanceWithDeposit
+    if (_erc20Balances[withdrawer].length() > 0) {
+      if (_erc20Balances[withdrawer].contains(tokenContractAddress)) {
+        newAmount -= _erc20Balances[withdrawer].get(tokenContractAddress); // note: as of 0.8, the Solidity compiler has built-in overflow checking. https://hackernoon.com/hack-solidity-integer-overflow-and-underflow
+      } else {
+        revert("withdrawing token that hasn't been deposited");
+      }
+    } else {
+      revert("withdrawing even though no tokens deposited");
+    }
+    // update the mapping with a new key:value pair
+    _erc20Balances[withdrawer].set(tokenContractAddress, newAmount);
+  }
+
+  function withdrawDepositedERC20Token(
+    address addressOfTokenToWithdraw,
+    uint256 amountToWithdraw
+  ) external onlyRole(USER) {
+    // validate inputs
+    require(
+      amountToWithdraw > 0,
+      "withdrawERC20: Withdrawal amount must be greater than 0"
+    );
+    // todo : validate that addressOfTokenToWithdraw is genuine ERC20 Token address.
+    require(
+      viewDepositedERC20Balance(addressOfTokenToWithdraw) >= amountToWithdraw,
+      "withdrawERC20: Withdrawal amount must be less than or equal to deposited amount."
+    );
+    // transfer the Token to the User
+    SafeERC20Upgradeable.safeTransferFrom(
+      IERC20Upgradeable(addressOfTokenToWithdraw),
+      address(this),
+      msg.sender,
+      amountToWithdraw
+    ); // safeTransferFrom throws when token contract returns false.
+    // emit relevant event.
+    emit ERC20Withdrawn(msg.sender, amountToWithdraw);
+    // update the balances
+    updateERC20BalanceWithWithdrawal(
+      addressOfTokenToWithdraw,
+      msg.sender,
+      amountToWithdraw
+    );
+  }
+
   // * --------- MANAGER-ONLY FUNCTIONS -----------
   function tradeERC20TokensForUser(
     address tokenIn,
