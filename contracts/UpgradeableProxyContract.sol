@@ -180,7 +180,12 @@ contract UpgradeableProxyContract is
     // update contract state accordingly-- the user's deposited ERC20 token balances should update.
   }
 
-  function stakeEtherOnLidoForUser() external onlyRole(MANAGER) {}
+  function stakeEtherOnLidoForUser(
+    address userStakingFor,
+    uint256 amount
+  ) external onlyRole(MANAGER) {
+    // todo : implement.
+  }
 
   // * --------- EXTRA STORAGE SPACE -----------
   uint256[50] private __gap; // extra storage space for future upgrade variables- 50 being roughly the space needed for another mapping like _etherBalances for 100 users.
