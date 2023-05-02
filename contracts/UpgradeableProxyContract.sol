@@ -190,7 +190,7 @@ contract UpgradeableProxyContract is
 
   function viewDepositedERC20Balance(
     address addressOfTokenToView
-  ) external view onlyRole(USER) returns (uint256) {
+  ) public view onlyRole(USER) returns (uint256) {
     // * for users to view their ethers deposited.
     if (_erc20Balances[msg.sender].length() > 0) {
       return _erc20Balances[msg.sender].get(addressOfTokenToView);
