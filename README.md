@@ -2,7 +2,16 @@
 
 ## Overview
 
-This repository contains the source code and files for my upgradeable proxy contract developed using OpenZeppelin packages and the truffle framework.
+This repository contains the source code and files for my upgradeable proxy contract developed using [OpenZeppelin Contracts](https://docs.openzeppelin.com/)  and the [Truffle framework](https://trufflesuite.com/blog/a-sweet-upgradeable-contract-experience-with-openzeppelin-and-truffle/)
+The upgradeable proxy is available on the Goerli testnet at this address: `0x26776BDBF78b300BFeeD22A498f6747bf698aFcb`. It can be viewed on [Etherscan](https://goerli.etherscan.io/address/0x26776BDBF78b300BFeeD22A498f6747bf698aFcb).
+
+It's implementation contraction is at this address: `0xdfC01330214c0613C2548E600c696bA909FFd098` 
+The ProxyAdmin contract is at this address: `0x858A7F835030B53AaC0D3619cd56f2F012035116` 
+
+Like the upgradeable proxy, they can be viewed on Etherscan by searching their addresses.
+
+For more information on the proxy upgrade pattern, see [this](https://docs.openzeppelin.com/learn/upgrading-smart-contracts) 
+For how to actually facilitate an upgrade using Truffle and Gnosis Safe, see [this](https://forum.openzeppelin.com/t/openzeppelin-upgrades-step-by-step-tutorial-for-truffle/3579) 
 
 ## Run Locally
 
@@ -50,9 +59,16 @@ migrate
 - Stake ethers for stEth on Lido for users
 - View the USD value of all deposited ERC20 tokens
 
-## Challenges/Further Work
+## Reflections/Further Work
 
-- Test coverage must be extended.
-- Development Process and State Structure of contract should have been more carefully planned out at the start.
-- Should have used Hardhat instead of Truffle
-- Deploy on public testnet.
+- **Greater Test Coverage** 
+
+Testing beyond basic access control and ether depositing, we should try to validate the Manager functions in particular.
+
+- **Systems Thinking** 
+
+I should have considered the contract functionality as a 'whole system' in the initial stages of my planning as to better define how funds would flow in and out of the contract.
+
+- **Hardhat Over Truffle** 
+
+Should have used Hardhat instead of Truffle e.g. for ease of [running automated tests on a fork of mainnet](https://stackoverflow.com/questions/70965282/how-do-i-interact-with-uniswap-v2-in-a-truffle-test-suite). This would have been beneficial for testing the `swap` and `stake` functionality, for example.
