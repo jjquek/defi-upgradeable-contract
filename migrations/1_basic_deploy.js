@@ -5,10 +5,10 @@ const { deployProxy } = require("@openzeppelin/truffle-upgrades");
 // );
 const UpgradeableProxyContract = artifacts.require("UpgradeableProxyContract");
 
-module.exports = function (deployer) {
+module.exports = async function (deployer) {
   // const mockEC20Upgradeable = deployer.deploy(mockERC20Upgradeable);
   // const mockAlwaysReturnTrueToken = deployer.deploy(mockERC20AlwaysReturnTrue);
-  const proxyInstance = deployProxy(UpgradeableProxyContract, [], {
+  await deployProxy(UpgradeableProxyContract, [], {
     deployer,
   });
 };
