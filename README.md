@@ -49,7 +49,6 @@ migrate
 - Swap deposited ERC20 tokens on UniswapV2 for users
 - Stake ethers for stEth on Lido for users
 - View the USD value of all deposited ERC20 tokens
-<!-- todo : insert a table here for reference -->
 
 ## Challenges/Further Work
 
