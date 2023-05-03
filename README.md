@@ -4,6 +4,28 @@
 
 This repository contains the source code and files for my upgradeable proxy contract developed using OpenZeppelin packages and the truffle framework.
 
+## Run Locally
+
+First, install the dependencies by running
+
+```
+npm i
+```
+
+Then, start the dev environment by running
+
+```
+truffle develop
+```
+
+Truffle commands can be issued without the `truffle` prefix whilst `truffle develop` runs.
+
+To deploy, run
+
+```
+migrate
+```
+
 ## Main Features
 
 ### Upgradeable
