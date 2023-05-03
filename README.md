@@ -1,5 +1,7 @@
 # Upgradeable Proxy Contract
 
+![Screenshot of Etherscan record of deployed upgradeable proxy](https://user-images.githubusercontent.com/96500919/235949491-350da30b-931f-44a5-96e2-383d2fffaaaf.png)
+
 ## Overview
 
 This repository contains the source code and files for my upgradeable proxy contract developed using [OpenZeppelin Contracts](https://docs.openzeppelin.com/)  and the [Truffle framework](https://trufflesuite.com/blog/a-sweet-upgradeable-contract-experience-with-openzeppelin-and-truffle/)
