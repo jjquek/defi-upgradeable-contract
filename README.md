@@ -58,9 +58,9 @@ migrate
 
 ### Managers Can:
 
-- Swap deposited ERC20 tokens on UniswapV2 for users
-- Stake ethers for stEth on Lido for users
-- View the USD value of all deposited ERC20 tokens
+- Swap deposited ERC20 tokens on [UniswapV2](https://uniswap.org/) for users
+- Stake ethers for stEth on [Lido](https://docs.lido.fi/) for users
+- View the USD value of all deposited ERC20 tokens using [Chainlink's Price Feed](https://docs.chain.link/data-feeds/price-feeds/addresses/?network=ethereum#Goerli%20Testnet)
 
 ## Reflections/Further Work
 
