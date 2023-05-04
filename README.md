@@ -12,7 +12,8 @@ The ProxyAdmin contract is at this address: `0x858A7F835030B53AaC0D3619cd56f2F01
 
 Like the upgradeable proxy, they can be viewed on Etherscan by searching their addresses.
 
-For more information on the proxy upgrade pattern, see [this](https://docs.openzeppelin.com/learn/upgrading-smart-contracts) 
+For more information on the proxy upgrade pattern, see [this](https://docs.openzeppelin.com/learn/upgrading-smart-contracts).
+
 For how to actually facilitate an upgrade using Truffle and Gnosis Safe, see [this](https://forum.openzeppelin.com/t/openzeppelin-upgrades-step-by-step-tutorial-for-truffle/3579) 
 
 ## Run Locally
@@ -65,7 +66,7 @@ migrate
 
 - **Greater Test Coverage** 
 
-Testing beyond basic access control and ether depositing, we should try to validate the Manager functions in particular.
+Testing beyond basic access control and ether depositing, we should try to validate the Manager functions in particular. On reflection, TDD/BDD would've been a better approach.
 
 - **Systems Thinking** 
 
