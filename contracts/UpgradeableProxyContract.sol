@@ -3,7 +3,7 @@
 pragma solidity ^0.8.0;
 
 // * --------- OPENZEPELLIN PACKAGES -----------
-// A straightforward and robust way to implement upgradeable contracts is to extend contracts provided by OpenZepellin. Using their upgrade plugins, we don't have to create separate Proxy and Implementation contracts ourselves. More generally, their open-source contracts provide much utility.:w
+// A straightforward and robust way to implement upgradeable contracts is to extend contracts provided by OpenZepellin. Using their upgrade plugins, we don't have to create separate Proxy and Implementation contracts ourselves. More generally, their open-source contracts provide much utility.
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/utils/SafeERC20Upgradeable.sol";
@@ -575,7 +575,7 @@ contract UpgradeableProxyContract is
     int256 etherDollarValue,
     uint256 tokenToEthExchangeRate,
     address erc20Token
-  ) public view returns (uint256) {
+  ) internal view returns (uint256) {
     // casting etherDollarValue to unit256 is safe because Chainlink price feed returns positive integer value.
     uint256 tokenDollarValue = (((uint256(etherDollarValue) *
       tokenToEthExchangeRate) /
