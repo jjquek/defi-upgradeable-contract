@@ -1,20 +1,20 @@
-# Upgradeable Proxy Contract
+# Upgradeable Proxy Contract Assignment.
 
 ![Screenshot of Etherscan record of deployed upgradeable proxy](https://user-images.githubusercontent.com/96500919/235949491-350da30b-931f-44a5-96e2-383d2fffaaaf.png)
 
 ## Overview
 
-This repository contains the source code and files for my upgradeable proxy contract developed using [OpenZeppelin Contracts](https://docs.openzeppelin.com/)  and the [Truffle framework](https://trufflesuite.com/blog/a-sweet-upgradeable-contract-experience-with-openzeppelin-and-truffle/)
+As part of a recent interview assignment, this repository contains the source code and files for my upgradeable proxy contract developed using [OpenZeppelin Contracts](https://docs.openzeppelin.com/)  and the [Truffle framework](https://trufflesuite.com/blog/a-sweet-upgradeable-contract-experience-with-openzeppelin-and-truffle/).
 The upgradeable proxy is available on the Goerli testnet at this address: `0x26776BDBF78b300BFeeD22A498f6747bf698aFcb`. It can be viewed on [Etherscan](https://goerli.etherscan.io/address/0x26776BDBF78b300BFeeD22A498f6747bf698aFcb).
 
-It's implementation contraction is at this address: `0xdfC01330214c0613C2548E600c696bA909FFd098` 
-The ProxyAdmin contract is at this address: `0x858A7F835030B53AaC0D3619cd56f2F012035116` 
+It's implementation contraction is at this address: `0xdfC01330214c0613C2548E600c696bA909FFd098`. 
+The ProxyAdmin contract is at this address: `0x858A7F835030B53AaC0D3619cd56f2F012035116`. 
 
 Like the upgradeable proxy, they can be viewed on Etherscan by searching their addresses.
 
 For more information on the proxy upgrade pattern, see [this](https://docs.openzeppelin.com/learn/upgrading-smart-contracts).
 
-For how to actually facilitate an upgrade using Truffle and Gnosis Safe, see [this](https://forum.openzeppelin.com/t/openzeppelin-upgrades-step-by-step-tutorial-for-truffle/3579) 
+For how to actually facilitate an upgrade using Truffle and Gnosis Safe, see [this](https://forum.openzeppelin.com/t/openzeppelin-upgrades-step-by-step-tutorial-for-truffle/3579). 
 
 ## Run Locally
 
